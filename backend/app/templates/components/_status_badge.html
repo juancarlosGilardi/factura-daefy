@@ -1,0 +1,27 @@
+{# Macro Jinja para mostrar estado de comprobante #}
+{% macro status_badge(estado) -%}
+  {% set map = {
+    'A': ('Aceptado', 'bg-green-100 text-green-700 border-green-200'),
+    'P': ('Pendiente', 'bg-yellow-100 text-yellow-800 border-yellow-200'),
+    'R': ('Rechazado', 'bg-red-100 text-red-700 border-red-200'),
+    'B': ('Anulado', 'bg-gray-200 text-gray-600 border-gray-300'),
+    'X': ('Comunicado baja', 'bg-blaugrana-grana-50 text-blaugrana-grana-700 border-blaugrana-grana-200'),
+  } %}
+  {% set tupla = map.get(estado, ('Desconocido', 'bg-gray-100 text-gray-700 border-gray-200')) %}
+  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border {{ tupla[1] }}">
+    {{ tupla[0] }}
+  </span>
+{%- endmacro %}
+
+{% macro tipo_doc_badge(tipo) -%}
+  {% set map = {
+    '01': ('Factura', 'bg-blaugrana-50 text-blaugrana-700'),
+    '03': ('Boleta', 'bg-blaugrana-grana-50 text-blaugrana-grana-700'),
+    '07': ('NC', 'bg-purple-50 text-purple-700'),
+    '08': ('ND', 'bg-orange-50 text-orange-700'),
+  } %}
+  {% set tupla = map.get(tipo, (tipo, 'bg-gray-100 text-gray-700')) %}
+  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ tupla[1] }}">
+    {{ tupla[0] }}
+  </span>
+{%- endmacro %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Producto{% endblock %}
+{% block page_title %}{% if producto_id %}Editar producto{% else %}Nuevo producto{% endif %}{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="productoForm({{ 'null' if not producto_id else producto_id }})" x-init="init()" class="max-w-2xl mx-auto">
+  <form @submit.prevent="guardar()" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Código *</label>
+        <input type="text" x-model="form.codigo" required class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500 font-mono"/>
+      </div>
+      <div class="md:col-span-2">
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Descripción *</label>
+        <input type="text" x-model="form.descripcion" required class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Unidad medida *</label>
+        <select x-model="form.unidad_medida" required class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500">
+          <option value="NIU">NIU - Unidad</option>
+          <option value="ZZ">ZZ - Servicio</option>
+          <option value="KGM">KGM - Kilogramo</option>
+          <option value="MTR">MTR - Metro</option>
+          <option value="LTR">LTR - Litro</option>
+          <option value="HUR">HUR - Hora</option>
+          <option value="DAY">DAY - Día</option>
+          <option value="GLL">GLL - Galón</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Valor unitario *</label>
+        <input type="number" step="0.01" min="0" x-model.number="form.valor_unitario" required class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500 text-right"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Moneda</label>
+        <select x-model="form.moneda" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500">
+          <option value="PEN">PEN</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Tipo afectación IGV *</label>
+      <select x-model="form.tipo_afectacion_igv" required class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500">
+        <option value="10">10 - Gravado</option>
+        <option value="20">20 - Exonerado</option>
+        <option value="30">30 - Inafecto</option>
+        <option value="40">40 - Exportación</option>
+      </select>
+    </div>
+
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" x-model="form.incluye_igv" class="w-4 h-4 text-blaugrana-500"/>
+      <span class="text-sm">El valor unitario ya incluye IGV</span>
+    </label>
+
+    <div>
+      <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Notas</label>
+      <textarea x-model="form.notas" rows="2" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"></textarea>
+    </div>
+
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" x-model="form.activo" class="w-4 h-4 text-blaugrana-500"/>
+      <span class="text-sm">Activo</span>
+    </label>
+
+    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+      <a href="/productos" class="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">Cancelar</a>
+      <button type="submit" :disabled="guardando"
+        class="px-5 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium disabled:opacity-50">
+        <span x-show="!guardando">Guardar</span>
+        <span x-show="guardando">Guardando...</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+function productoForm(id) {
+  return {
+    id: id, guardando: false,
+    form: {
+      codigo: '', descripcion: '', unidad_medida: 'NIU',
+      valor_unitario: 0, moneda: 'PEN', tipo_afectacion_igv: '10',
+      incluye_igv: false, activo: true, notas: '',
+    },
+
+    async init() {
+      if (!this.id) return;
+      try {
+        const res = await fetch('/api/productos/' + this.id);
+        if (!res.ok) throw new Error('No se pudo cargar');
+        Object.assign(this.form, await res.json());
+      } catch (e) { window.toast('error', e.message); }
+    },
+
+    async guardar() {
+      this.guardando = true;
+      try {
+        const url = this.id ? '/api/productos/' + this.id : '/api/productos';
+        const method = this.id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method, headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          throw new Error(msg);
+        }
+        window.toast('success', 'Producto guardado');
+        setTimeout(() => { window.location.href = '/productos'; }, 500);
+      } catch (e) { window.toast('error', e.message); }
+      finally { this.guardando = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

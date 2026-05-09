@@ -1,0 +1,37 @@
+/* Factura-mdb — estilos globales blaugrana */
+
+/* Scroll bar suave */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Animaciones suaves para tablas/cards */
+.fade-in {
+  animation: fadeIn 0.2s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Selectores estilizados */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+}
+
+/* Cuando se imprime el comprobante PDF, todo limpio */
+@media print {
+  aside, header { display: none; }
+  main { padding: 0 !important; }
+}

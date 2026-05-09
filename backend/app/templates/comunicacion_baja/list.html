@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Comunicación de baja{% endblock %}
+{% block page_title %}Comunicación de baja{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="cbList()" x-init="cargar()" class="space-y-4">
+  <div class="flex flex-wrap justify-between items-center gap-3">
+    <div>
+      <h2 class="font-display font-semibold text-xl text-gray-800">Comunicaciones de baja</h2>
+      <p class="text-sm text-gray-500">Anulación oficial de comprobantes ante SUNAT (formato RA).</p>
+    </div>
+    <a href="/comunicacion-baja/nueva"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium shadow">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      Nueva comunicación
+    </a>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+            <th class="px-4 py-3">Número RA</th>
+            <th class="px-4 py-3">Fecha</th>
+            <th class="px-4 py-3">Comprobantes</th>
+            <th class="px-4 py-3">Estado SUNAT</th>
+            <th class="px-4 py-3 text-center">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if="!loading && items.length === 0">
+            <tr><td colspan="5" class="px-4 py-12 text-center text-gray-400">No hay comunicaciones</td></tr>
+          </template>
+          <template x-for="cb in items" :key="cb.id">
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+              <td class="px-4 py-3 font-medium text-gray-800" x-text="cb.numero || ('RA-' + cb.fecha_generacion + '-' + cb.correlativo)"></td>
+              <td class="px-4 py-3 text-gray-600" x-text="cb.fecha_generacion"></td>
+              <td class="px-4 py-3 text-gray-600">
+                <span x-text="(cb.comprobantes || []).length + ' comprobante(s)'"></span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border"
+                      :class="estadoClase(cb.estado)" x-text="estadoLabel(cb.estado)"></span>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-center gap-1">
+                  <a x-show="cb.ticket" :href="'/api/comunicacion-baja/' + cb.id + '/cdr'" class="p-1.5 hover:bg-gray-100 rounded text-green-600" title="CDR">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                  </a>
+                  <button x-show="cb.estado !== 'A'" @click="consultar(cb)" class="p-1.5 hover:bg-gray-100 rounded text-blaugrana-600" title="Consultar ticket">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function cbList() {
+  return {
+    items: [], loading: false,
+    async cargar() {
+      this.loading = true;
+      try {
+        const res = await fetch('/api/comunicacion-baja');
+        if (!res.ok) throw new Error('Error');
+        const data = await res.json();
+        this.items = data.items || data;
+      } catch (e) { window.toast('error', e.message); }
+      finally { this.loading = false; }
+    },
+    async consultar(cb) {
+      try {
+        const res = await fetch('/api/comunicacion-baja/' + cb.id + '/consultar', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Error');
+        window.toast('success', 'Consultado: ' + (data.estado || ''));
+        this.cargar();
+      } catch (e) { window.toast('error', e.message); }
+    },
+    estadoLabel(e) { return { 'A': 'Aceptado', 'P': 'Pendiente', 'R': 'Rechazado' }[e] || e || 'Sin enviar'; },
+    estadoClase(e) {
+      return {
+        'A': 'bg-green-100 text-green-700 border-green-200',
+        'P': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        'R': 'bg-red-100 text-red-700 border-red-200',
+      }[e] || 'bg-gray-100 text-gray-700 border-gray-200';
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="geometricPrecision">
+  <!-- ===========================================================
+       SinSol — icono blaugrana
+       Estilo libre inspirado en las franjas blaugrana del FCB:
+       franjas verticales alternas azul/grana detrás de una "S"
+       blanca en bloque. Acento dorado abajo.
+       Paleta:
+         azul   #004D98
+         grana  #A50044
+         dorado #EDBB00
+       =========================================================== -->
+
+  <!-- Esquinas redondeadas del icono -->
+  <defs>
+    <clipPath id="rounded">
+      <rect x="0" y="0" width="256" height="256" rx="56" ry="56"/>
+    </clipPath>
+    <linearGradient id="sgradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F4F8FC"/>
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#rounded)">
+
+    <!-- Fondo base azul -->
+    <rect width="256" height="256" fill="#004D98"/>
+
+    <!-- 4 franjas verticales blaugrana
+         alternancia: azul, grana, azul, grana
+         se tiñen sólo las grana sobre el fondo azul -->
+    <g>
+      <rect x="32"  y="0" width="32" height="256" fill="#A50044"/>
+      <rect x="96"  y="0" width="32" height="256" fill="#A50044"/>
+      <rect x="160" y="0" width="32" height="256" fill="#A50044"/>
+      <rect x="224" y="0" width="32" height="256" fill="#A50044"/>
+    </g>
+
+    <!-- Velo azul muy suave para suavizar el contraste de franjas -->
+    <rect width="256" height="256" fill="#004D98" opacity="0.18"/>
+
+    <!-- Línea dorada inferior (acento blaugrana-dorado) -->
+    <rect x="0" y="232" width="256" height="8" fill="#EDBB00"/>
+    <rect x="0" y="244" width="256" height="3" fill="#EDBB00" opacity="0.6"/>
+
+    <!-- Disco blanco con sombra suave detrás de la S -->
+    <circle cx="128" cy="120" r="78"
+            fill="#FFFFFF" opacity="0.08"/>
+    <circle cx="128" cy="120" r="68"
+            fill="#FFFFFF" opacity="0.10"/>
+
+    <!-- Letra S grande, blanca, en Poppins-like (vector tipográfico nativo) -->
+    <text x="128" y="170" text-anchor="middle"
+          font-family="Poppins, 'Segoe UI', Arial, sans-serif"
+          font-weight="800" font-size="160"
+          fill="url(#sgradient)"
+          stroke="#003D7A" stroke-width="2" paint-order="stroke">S</text>
+
+  </g>
+
+  <!-- Borde sutil para que se note el icono sobre fondos claros -->
+  <rect x="0.5" y="0.5" width="255" height="255" rx="56" ry="56"
+        fill="none" stroke="#002E5C" stroke-width="1" opacity="0.25"/>
+</svg>

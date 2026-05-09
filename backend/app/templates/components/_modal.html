@@ -1,0 +1,42 @@
+{# Wrapper de modal genérico — usar con Alpine #}
+{# Uso:
+  {% from 'components/_modal.html' import modal %}
+  Activar con x-data="{open:false}" y un botón con @click="open = true"
+  Renderizar:
+  {{ modal('miModal', 'Título') }}
+  ... y poner contenido en el slot
+#}
+
+{# Como Jinja no soporta slots reales, en Factura-mdb usamos el patrón directo:
+   crea el modal inline con esta estructura tailwind+Alpine.
+   Plantilla de copy-paste:
+#}
+
+{# COPIA ESTO COMO REFERENCIA cuando necesites un modal:
+
+<div x-show="abierto"
+     x-transition.opacity
+     class="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4"
+     @keydown.escape.window="abierto = false"
+     style="display: none;">
+  <div @click.outside="abierto = false"
+       class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+      <h3 class="font-display font-semibold text-gray-800">TÍTULO</h3>
+      <button @click="abierto = false" class="text-gray-400 hover:text-gray-700">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-5 overflow-y-auto flex-1">
+      ... CONTENIDO ...
+    </div>
+    <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 bg-gray-50">
+      <button @click="abierto = false" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">Cancelar</button>
+      <button class="px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+#}

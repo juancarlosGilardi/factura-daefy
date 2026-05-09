@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Hero blaugrana -->
+  <div class="bg-gradient-to-r from-blaugrana-500 to-blaugrana-700 rounded-2xl p-6 text-white shadow-lg">
+    <h2 class="font-display font-bold text-2xl">¡Hola, {{ empresa.razon_social }}!</h2>
+    <p class="mt-1 text-blaugrana-100">Hoy es un buen día para emitir comprobantes.</p>
+    <div class="mt-4 flex gap-3">
+      <a href="/comprobantes/emitir"
+         class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blaugrana-grana-500 hover:bg-blaugrana-grana-600 font-medium transition-colors shadow">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Emitir comprobante
+      </a>
+      <a href="/comprobantes" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white/10 hover:bg-white/20 font-medium">
+        Ver todos
+      </a>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    {% set kpis = [
+      ('Emitidos hoy', '0', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2'),
+      ('Ventas del mes', 'S/ 0', 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1'),
+      ('Pendientes SUNAT', '0', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'),
+      ('Clientes', '0', 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857M9 7a3 3 0 116 0 3 3 0 01-6 0z'),
+    ] %}
+    {% for label, value, icon in kpis %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+      <div class="w-12 h-12 rounded-lg bg-blaugrana-50 flex items-center justify-center text-blaugrana-500">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}"/>
+        </svg>
+      </div>
+      <div>
+        <div class="text-xs uppercase tracking-wider text-gray-500 font-medium">{{ label }}</div>
+        <div class="text-2xl font-display font-bold text-gray-900">{{ value }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Últimos comprobantes -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+      <h3 class="font-display font-semibold text-gray-800">Últimos comprobantes</h3>
+      <a href="/comprobantes" class="text-sm text-blaugrana-500 hover:underline">Ver todos →</a>
+    </div>
+    <div class="p-12 text-center text-gray-400">
+      <svg class="w-16 h-16 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      <p class="mt-3 font-medium">Aún no has emitido comprobantes</p>
+      <a href="/comprobantes/emitir" class="mt-3 inline-block text-blaugrana-grana-500 hover:underline font-medium">
+        Emitir el primero →
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

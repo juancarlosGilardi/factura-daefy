@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block page_title %}Clientes{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="clientesList()" x-init="cargar(true)" class="space-y-4">
+
+  <div class="flex flex-wrap justify-between items-center gap-3">
+    <div>
+      <h2 class="font-display font-semibold text-xl text-gray-800">Clientes</h2>
+      <p class="text-sm text-gray-500">Maestro de clientes para emisión de comprobantes.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a :href="exportUrl()" :title="exportTooltip()"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blaugrana-grana-500 hover:bg-blaugrana-grana-600 text-white font-medium shadow">
+        <span aria-hidden="true">📥</span>
+        Exportar Excel
+      </a>
+      <a href="/clientes/nuevo"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium shadow">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Nuevo cliente
+      </a>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="md:col-span-2">
+        <div class="relative">
+          <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" placeholder="Buscar por documento, razón social..." x-model.debounce.400ms="filtros.q" @input="cargar(true)"
+            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+        </div>
+      </div>
+      <div>
+        <select x-model="filtros.tipo_documento" @change="cargar(true)"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <option value="">Todos los tipos</option>
+          <option value="6">RUC</option>
+          <option value="1">DNI</option>
+          <option value="4">Carnet ext.</option>
+          <option value="7">Pasaporte</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-visible">
+    <div class="overflow-x-auto overflow-y-visible">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+            <th class="px-4 py-3 relative">
+              <div class="flex items-center gap-1">
+                <span @click="sortBy('numero_documento')" class="cursor-pointer select-none hover:text-blaugrana-700">
+                  Documento
+                  <span x-show="sortField === 'numero_documento' && sortDir === 'asc'" aria-hidden="true">▲</span>
+                  <span x-show="sortField === 'numero_documento' && sortDir === 'desc'" aria-hidden="true">▼</span>
+                </span>
+                <button @click.stop="toggleFiltro('tipo_documento')"
+                        class="text-blaugrana-500 hover:bg-blaugrana-50 rounded p-1"
+                        :class="{'bg-blaugrana-50': (filtrosColumna.tipo_documento || []).length > 0}"
+                        :aria-expanded="filtroAbierto === 'tipo_documento'"
+                        aria-label="Filtrar por tipo de documento">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                  </svg>
+                </button>
+              </div>
+              <div x-show="filtroAbierto === 'tipo_documento'" x-cloak @click.outside="filtroAbierto = null" class="absolute left-0 z-30 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 normal-case font-normal text-gray-800">
+                <input type="text" x-model="filtroBusqueda.tipo_documento" placeholder="Buscar..." class="w-full border rounded px-2 py-1 mb-2 text-sm">
+                <div class="max-h-48 overflow-y-auto space-y-1">
+                  <template x-for="val in valoresUnicos('tipo_documento')" :key="val">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" :value="val" x-model="filtrosColumna.tipo_documento">
+                      <span x-text="docLabel(val) + ' (' + val + ')'"></span>
+                    </label>
+                  </template>
+                </div>
+                <div class="flex justify-between mt-3 pt-2 border-t">
+                  <button @click="filtrosColumna.tipo_documento = []" class="text-xs text-slate-500 hover:underline">Limpiar</button>
+                  <button @click="filtroAbierto = null" class="text-xs bg-blaugrana-500 hover:bg-blaugrana-600 text-white px-3 py-1 rounded">Cerrar</button>
+                </div>
+              </div>
+            </th>
+            <th @click="sortBy('razon_social')" class="px-4 py-3 cursor-pointer select-none hover:text-blaugrana-700">
+              Razón social / Nombre
+              <span x-show="sortField === 'razon_social' && sortDir === 'asc'" aria-hidden="true">▲</span>
+              <span x-show="sortField === 'razon_social' && sortDir === 'desc'" aria-hidden="true">▼</span>
+            </th>
+            <th class="px-4 py-3 relative">
+              <div class="flex items-center gap-1">
+                <span @click="sortBy('direccion')" class="cursor-pointer select-none hover:text-blaugrana-700">
+                  Dirección
+                  <span x-show="sortField === 'direccion' && sortDir === 'asc'" aria-hidden="true">▲</span>
+                  <span x-show="sortField === 'direccion' && sortDir === 'desc'" aria-hidden="true">▼</span>
+                </span>
+                <button @click.stop="toggleFiltro('distrito')"
+                        class="text-blaugrana-500 hover:bg-blaugrana-50 rounded p-1"
+                        :class="{'bg-blaugrana-50': (filtrosColumna.distrito || []).length > 0}"
+                        :aria-expanded="filtroAbierto === 'distrito'"
+                        aria-label="Filtrar por distrito">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                  </svg>
+                </button>
+              </div>
+              <div x-show="filtroAbierto === 'distrito'" x-cloak @click.outside="filtroAbierto = null" class="absolute left-0 z-30 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 normal-case font-normal text-gray-800">
+                <input type="text" x-model="filtroBusqueda.distrito" placeholder="Buscar..." class="w-full border rounded px-2 py-1 mb-2 text-sm">
+                <div class="max-h-48 overflow-y-auto space-y-1">
+                  <template x-if="valoresUnicos('distrito').length === 0">
+                    <p class="text-xs text-gray-400">Sin valores</p>
+                  </template>
+                  <template x-for="val in valoresUnicos('distrito')" :key="val">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" :value="val" x-model="filtrosColumna.distrito">
+                      <span x-text="val"></span>
+                    </label>
+                  </template>
+                </div>
+                <div class="flex justify-between mt-3 pt-2 border-t">
+                  <button @click="filtrosColumna.distrito = []" class="text-xs text-slate-500 hover:underline">Limpiar</button>
+                  <button @click="filtroAbierto = null" class="text-xs bg-blaugrana-500 hover:bg-blaugrana-600 text-white px-3 py-1 rounded">Cerrar</button>
+                </div>
+              </div>
+            </th>
+            <th class="px-4 py-3">Contacto</th>
+            <th class="px-4 py-3 text-center">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if="!loading && clientesFiltrados.length === 0">
+            <tr><td colspan="5" class="px-4 py-12 text-center text-gray-400">No hay clientes</td></tr>
+          </template>
+          <template x-for="cli in clientesFiltrados" :key="cli.id">
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+              <td class="px-4 py-3">
+                <div class="font-medium text-gray-800" x-text="docLabel(cli.tipo_documento) + ' ' + cli.numero_documento"></div>
+              </td>
+              <td class="px-4 py-3 font-medium text-gray-800" x-text="cli.razon_social"></td>
+              <td class="px-4 py-3 text-gray-600">
+                <div x-text="cli.direccion || '—'"></div>
+                <div class="text-xs text-gray-500" x-text="cli.distrito || ''"></div>
+              </td>
+              <td class="px-4 py-3 text-gray-600">
+                <div x-text="cli.email || ''"></div>
+                <div class="text-xs text-gray-500" x-text="cli.telefono || ''"></div>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-center gap-1">
+                  <a :href="'/clientes/' + cli.id + '/editar'" title="Editar" class="p-1.5 hover:bg-gray-100 rounded text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </a>
+                  <button @click="eliminar(cli)" title="Eliminar" class="p-1.5 hover:bg-red-50 rounded text-red-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <div x-show="clientes.length > 0" class="flex justify-center py-4 border-t border-gray-100">
+      <button x-show="hasMore" @click="cargar(false)" :disabled="loading"
+        class="px-5 py-2 rounded-lg border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50 disabled:opacity-50">
+        <span x-show="!loading">Cargar más</span>
+        <span x-show="loading">Cargando...</span>
+      </button>
+      <div x-show="!hasMore" class="text-sm text-gray-400">No hay más resultados</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function clientesList() {
+  return {
+    filtros: { q: '', tipo_documento: '' },
+    clientes: [], loading: false, hasMore: false, offset: 0, limit: 50,
+
+    sortField: null, sortDir: 'asc',
+    filtroAbierto: null,
+    filtroBusqueda: {},
+    filtrosColumna: { tipo_documento: [], distrito: [] },
+
+    async cargar(reset) {
+      if (reset) { this.offset = 0; this.clientes = []; }
+      this.loading = true;
+      try {
+        const params = new URLSearchParams();
+        Object.entries(this.filtros).forEach(([k,v]) => { if (v) params.append(k, v); });
+        params.append('offset', this.offset); params.append('limit', this.limit);
+        const res = await fetch('/api/clientes?' + params.toString());
+        if (!res.ok) throw new Error('Error');
+        const data = await res.json();
+        const items = data.items || data;
+        this.clientes.push(...items);
+        this.hasMore = items.length === this.limit;
+        this.offset += items.length;
+      } catch (e) { window.toast('error', e.message); }
+      finally { this.loading = false; }
+    },
+
+    async eliminar(cli) {
+      if (!confirm('¿Eliminar a ' + cli.razon_social + '?')) return;
+      try {
+        const res = await fetch('/api/clientes/' + cli.id, { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || 'No se pudo eliminar');
+        }
+        window.toast('success', 'Cliente eliminado');
+        this.cargar(true);
+      } catch (e) { window.toast('error', e.message); }
+    },
+
+    // ===== Sort =====
+    sortBy(field) {
+      if (this.sortField === field) {
+        this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        this.sortField = field;
+        this.sortDir = 'asc';
+      }
+    },
+    get clientesOrdenados() {
+      if (!this.sortField) return this.clientes;
+      const f = this.sortField, d = this.sortDir;
+      return [...this.clientes].sort((a, b) => {
+        const va = a[f], vb = b[f];
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        if (va < vb) return d === 'asc' ? -1 : 1;
+        if (va > vb) return d === 'asc' ? 1 : -1;
+        return 0;
+      });
+    },
+
+    // ===== Filtro por columna =====
+    toggleFiltro(field) {
+      this.filtroAbierto = this.filtroAbierto === field ? null : field;
+    },
+    valoresUnicos(field) {
+      const vals = [...new Set(this.clientes.map(i => i[field]).filter(v => v != null && v !== ''))];
+      const busq = (this.filtroBusqueda[field] || '').toString().toLowerCase();
+      return vals.filter(v => String(v).toLowerCase().includes(busq)).sort();
+    },
+    get clientesFiltrados() {
+      return this.clientesOrdenados.filter(item => {
+        return Object.entries(this.filtrosColumna).every(([f, vals]) => {
+          if (!vals || vals.length === 0) return true;
+          return vals.includes(item[f]);
+        });
+      });
+    },
+    hayFiltrosColumna() {
+      return Object.values(this.filtrosColumna).some(v => v && v.length > 0);
+    },
+
+    // ===== Export =====
+    exportUrl() {
+      const params = new URLSearchParams();
+      Object.entries(this.filtros).forEach(([k, v]) => { if (v) params.append(k, v); });
+      const qs = params.toString();
+      return '/api/clientes/export.xlsx' + (qs ? '?' + qs : '');
+    },
+    exportTooltip() {
+      const base = 'Exporta todos los registros del filtro principal a Excel.';
+      return this.hayFiltrosColumna()
+        ? base + ' Los filtros por columna no se incluyen aún en la exportación.'
+        : base;
+    },
+
+    docLabel(t) { return { '1': 'DNI', '6': 'RUC', '4': 'CE', '7': 'PAS', '0': 'S/D' }[t] || t || ''; },
+  };
+}
+</script>
+{% endblock %}

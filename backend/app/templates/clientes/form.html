@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Cliente{% endblock %}
+{% block page_title %}{% if cliente_id %}Editar cliente{% else %}Nuevo cliente{% endif %}{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="clienteForm({{ 'null' if not cliente_id else cliente_id }})" x-init="init()" class="max-w-2xl mx-auto">
+  <form @submit.prevent="guardar()" class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Tipo documento *</label>
+        <select x-model="form.tipo_documento" required
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500">
+          <option value="6">RUC</option>
+          <option value="1">DNI</option>
+          <option value="4">Carnet de extranjería</option>
+          <option value="7">Pasaporte</option>
+          <option value="0">Sin documento</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Número documento *</label>
+        <input type="text" x-model="form.numero_documento" required
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+    </div>
+
+    <div>
+      <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Razón social / Nombre *</label>
+      <input type="text" x-model="form.razon_social" required
+        class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+    </div>
+
+    <div>
+      <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Dirección</label>
+      <input type="text" x-model="form.direccion"
+        class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Departamento</label>
+        <input type="text" x-model="form.departamento" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Provincia</label>
+        <input type="text" x-model="form.provincia" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Distrito</label>
+        <input type="text" x-model="form.distrito" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Email</label>
+        <input type="email" x-model="form.email" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Teléfono</label>
+        <input type="text" x-model="form.telefono" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+    </div>
+
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" x-model="form.activo" class="w-4 h-4 text-blaugrana-500"/>
+      <span class="text-sm">Cliente activo</span>
+    </label>
+
+    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+      <a href="/clientes" class="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">Cancelar</a>
+      <button type="submit" :disabled="guardando"
+        class="px-5 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium disabled:opacity-50">
+        <span x-show="!guardando">Guardar</span>
+        <span x-show="guardando">Guardando...</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+function clienteForm(id) {
+  return {
+    id: id, guardando: false,
+    form: {
+      tipo_documento: '6', numero_documento: '', razon_social: '',
+      direccion: '', departamento: '', provincia: '', distrito: '',
+      email: '', telefono: '', activo: true,
+    },
+
+    async init() {
+      if (!this.id) return;
+      try {
+        const res = await fetch('/api/clientes/' + this.id);
+        if (!res.ok) throw new Error('No se pudo cargar');
+        const data = await res.json();
+        Object.assign(this.form, data);
+      } catch (e) { window.toast('error', e.message); }
+    },
+
+    async guardar() {
+      this.guardando = true;
+      try {
+        const url = this.id ? '/api/clientes/' + this.id : '/api/clientes';
+        const method = this.id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method, headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          throw new Error(msg);
+        }
+        window.toast('success', 'Cliente guardado');
+        setTimeout(() => { window.location.href = '/clientes'; }, 500);
+      } catch (e) { window.toast('error', e.message); }
+      finally { this.guardando = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

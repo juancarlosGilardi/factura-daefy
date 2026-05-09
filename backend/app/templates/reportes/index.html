@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Reportes{% endblock %}
+{% block page_title %}Reportes{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="reportesPage()" x-init="cargar()" class="space-y-5 max-w-6xl mx-auto">
+
+  <!-- Filtro periodo -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Desde</label>
+        <input type="date" x-model="filtros.desde" @change="cargar()" class="mt-1 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Hasta</label>
+        <input type="date" x-model="filtros.hasta" @change="cargar()" class="mt-1 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+      <button @click="setMes()" class="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm">Mes actual</button>
+      <button @click="setAnio()" class="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm">Año actual</button>
+    </div>
+  </div>
+
+  <!-- Toolbar de export global -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-center justify-between gap-3">
+    <div class="text-sm text-gray-600">
+      <span class="font-medium">Exportar reportes a Excel</span>
+      <span class="text-gray-400">— se aplican los filtros de período de arriba.</span>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a :href="exportUrlVentas()"
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white text-sm font-medium shadow"
+         title="Descarga las ventas día a día del periodo">
+        <span aria-hidden="true">📥</span> Ventas a Excel
+      </a>
+      <a :href="exportUrlVentasMes()"
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white text-sm font-medium shadow"
+         title="Resumen del mes (de la fecha 'Hasta')">
+        <span aria-hidden="true">📥</span> Ventas del mes
+      </a>
+      <a :href="exportUrlTopClientes()"
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white text-sm font-medium shadow">
+        <span aria-hidden="true">📥</span> Top clientes
+      </a>
+      <a :href="exportUrlTopProductos()"
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white text-sm font-medium shadow">
+        <span aria-hidden="true">📥</span> Top productos
+      </a>
+      <a href="/api/reportes/pendientes-sunat/export.xlsx"
+         class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blaugrana-grana-500 hover:bg-blaugrana-grana-600 text-white text-sm font-medium shadow">
+        <span aria-hidden="true">📥</span> Pendientes SUNAT
+      </a>
+    </div>
+  </div>
+
+  <!-- Ventas mensuales -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-gray-800">Ventas del periodo</h3>
+      <a :href="exportUrlVentas()" class="inline-flex items-center gap-1 text-sm text-blaugrana-700 hover:bg-blaugrana-50 px-2 py-1 rounded">
+        <span aria-hidden="true">📥</span> Exportar a Excel
+      </a>
+    </div>
+    <template x-if="ventas.dias && ventas.dias.length > 0">
+      <div>
+        <div class="grid grid-cols-3 md:grid-cols-4 gap-3 mb-4">
+          <div class="bg-blaugrana-50 rounded-lg p-3">
+            <div class="text-xs uppercase text-blaugrana-600">Total ventas</div>
+            <div class="font-display font-bold text-xl text-blaugrana-700" x-text="'S/ ' + (ventas.total || 0).toFixed(2)"></div>
+          </div>
+          <div class="bg-blaugrana-grana-50 rounded-lg p-3">
+            <div class="text-xs uppercase text-blaugrana-grana-600">N° comprobantes</div>
+            <div class="font-display font-bold text-xl text-blaugrana-grana-700" x-text="ventas.cantidad || 0"></div>
+          </div>
+          <div class="bg-green-50 rounded-lg p-3">
+            <div class="text-xs uppercase text-green-700">Aceptados</div>
+            <div class="font-display font-bold text-xl text-green-700" x-text="ventas.aceptados || 0"></div>
+          </div>
+          <div class="bg-yellow-50 rounded-lg p-3">
+            <div class="text-xs uppercase text-yellow-700">Pendientes</div>
+            <div class="font-display font-bold text-xl text-yellow-700" x-text="ventas.pendientes || 0"></div>
+          </div>
+        </div>
+        <!-- Gráfico de barras simple en CSS -->
+        <div class="space-y-1">
+          <template x-for="d in ventas.dias" :key="d.fecha">
+            <div class="flex items-center gap-2 text-sm">
+              <div class="w-24 text-gray-600 text-xs" x-text="d.fecha"></div>
+              <div class="flex-1 bg-gray-100 rounded h-6 relative">
+                <div class="bg-blaugrana-500 h-full rounded transition-all" :style="'width: ' + (ventas.maxDia ? (d.total / ventas.maxDia * 100) : 0) + '%'"></div>
+                <div class="absolute inset-0 flex items-center px-2 text-xs font-medium" :class="d.total > ventas.maxDia * 0.4 ? 'text-white' : 'text-gray-700'"
+                     x-text="'S/ ' + (d.total || 0).toFixed(2)"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+    <template x-if="!ventas.dias || ventas.dias.length === 0">
+      <p class="text-sm text-gray-400">Sin datos en este periodo</p>
+    </template>
+  </div>
+
+  <!-- Top clientes -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-gray-800">Top clientes</h3>
+      <a :href="exportUrlTopClientes()" class="inline-flex items-center gap-1 text-sm text-blaugrana-700 hover:bg-blaugrana-50 px-2 py-1 rounded">
+        <span aria-hidden="true">📥</span> Exportar a Excel
+      </a>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+          <th class="px-3 py-2">#</th>
+          <th class="px-3 py-2">Cliente</th>
+          <th class="px-3 py-2 text-right">Comprobantes</th>
+          <th class="px-3 py-2 text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="topClientes.length === 0">
+          <tr><td colspan="4" class="px-3 py-6 text-center text-gray-400">Sin datos</td></tr>
+        </template>
+        <template x-for="(c, idx) in topClientes" :key="c.cliente">
+          <tr class="border-b border-gray-100">
+            <td class="px-3 py-2 text-gray-500" x-text="idx + 1"></td>
+            <td class="px-3 py-2 font-medium" x-text="c.cliente"></td>
+            <td class="px-3 py-2 text-right" x-text="c.cantidad || 0"></td>
+            <td class="px-3 py-2 text-right font-medium" x-text="'S/ ' + (c.total || 0).toFixed(2)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Top productos -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-gray-800">Top productos</h3>
+      <a :href="exportUrlTopProductos()" class="inline-flex items-center gap-1 text-sm text-blaugrana-700 hover:bg-blaugrana-50 px-2 py-1 rounded">
+        <span aria-hidden="true">📥</span> Exportar a Excel
+      </a>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+          <th class="px-3 py-2">#</th>
+          <th class="px-3 py-2">Producto</th>
+          <th class="px-3 py-2 text-right">Cantidad</th>
+          <th class="px-3 py-2 text-right">Ingresos</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="topProductos.length === 0">
+          <tr><td colspan="4" class="px-3 py-6 text-center text-gray-400">Sin datos</td></tr>
+        </template>
+        <template x-for="(p, idx) in topProductos" :key="p.producto">
+          <tr class="border-b border-gray-100">
+            <td class="px-3 py-2 text-gray-500" x-text="idx + 1"></td>
+            <td class="px-3 py-2 font-medium" x-text="p.producto"></td>
+            <td class="px-3 py-2 text-right" x-text="(p.cantidad || 0).toFixed(2)"></td>
+            <td class="px-3 py-2 text-right font-medium" x-text="'S/ ' + (p.total || 0).toFixed(2)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pendientes SUNAT -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-display font-semibold text-gray-800">Comprobantes pendientes SUNAT</h3>
+      <a href="/api/reportes/pendientes-sunat/export.xlsx" class="inline-flex items-center gap-1 text-sm text-blaugrana-700 hover:bg-blaugrana-50 px-2 py-1 rounded">
+        <span aria-hidden="true">📥</span> Exportar a Excel
+      </a>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+          <th class="px-3 py-2">Número</th>
+          <th class="px-3 py-2">Fecha</th>
+          <th class="px-3 py-2">Cliente</th>
+          <th class="px-3 py-2 text-right">Total</th>
+          <th class="px-3 py-2">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="pendientes.length === 0">
+          <tr><td colspan="5" class="px-3 py-6 text-center text-gray-400">Todo al día</td></tr>
+        </template>
+        <template x-for="c in pendientes" :key="c.id">
+          <tr class="border-b border-gray-100">
+            <td class="px-3 py-2 font-medium">
+              <a :href="'/comprobantes/' + c.id" class="text-blaugrana-700 hover:underline" x-text="c.numero_completo"></a>
+            </td>
+            <td class="px-3 py-2 text-gray-600" x-text="c.fecha_emision"></td>
+            <td class="px-3 py-2 text-gray-600 truncate max-w-xs" x-text="c.cliente_razon_social"></td>
+            <td class="px-3 py-2 text-right" x-text="(c.moneda || 'PEN') + ' ' + (c.total_venta || 0).toFixed(2)"></td>
+            <td class="px-3 py-2"><span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold border bg-yellow-100 text-yellow-800 border-yellow-200" x-text="c.estado"></span></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function reportesPage() {
+  const hoy = new Date();
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  return {
+    filtros: {
+      desde: inicioMes.toISOString().slice(0, 10),
+      hasta: hoy.toISOString().slice(0, 10),
+    },
+    ventas: {}, topClientes: [], topProductos: [], pendientes: [],
+
+    async cargar() {
+      const params = new URLSearchParams(this.filtros);
+      try {
+        const [v, tc, tp, pe] = await Promise.all([
+          fetch('/api/reportes/ventas?' + params).then(r => r.ok ? r.json() : {}),
+          fetch('/api/reportes/top-clientes?' + params).then(r => r.ok ? r.json() : { items: [] }),
+          fetch('/api/reportes/top-productos?' + params).then(r => r.ok ? r.json() : { items: [] }),
+          fetch('/api/reportes/pendientes-sunat').then(r => r.ok ? r.json() : { items: [] }),
+        ]);
+        this.ventas = v;
+        if (this.ventas.dias) {
+          this.ventas.maxDia = Math.max(...this.ventas.dias.map(d => d.total || 0), 1);
+        }
+        this.topClientes = tc.items || tc;
+        this.topProductos = tp.items || tp;
+        this.pendientes = pe.items || pe;
+      } catch (e) { window.toast('error', 'Error cargando reportes'); }
+    },
+
+    setMes() {
+      const h = new Date();
+      this.filtros.desde = new Date(h.getFullYear(), h.getMonth(), 1).toISOString().slice(0,10);
+      this.filtros.hasta = h.toISOString().slice(0,10);
+      this.cargar();
+    },
+
+    setAnio() {
+      const h = new Date();
+      this.filtros.desde = new Date(h.getFullYear(), 0, 1).toISOString().slice(0,10);
+      this.filtros.hasta = h.toISOString().slice(0,10);
+      this.cargar();
+    },
+
+    // ===== Helpers para construir URLs de export Excel =====
+    _qs(params) {
+      const sp = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v) sp.append(k, v); });
+      const s = sp.toString();
+      return s ? '?' + s : '';
+    },
+    exportUrlVentas() {
+      return '/api/reportes/ventas/export.xlsx' + this._qs({
+        desde: this.filtros.desde, hasta: this.filtros.hasta,
+      });
+    },
+    exportUrlVentasMes() {
+      // Toma año y mes del 'hasta' (o hoy si vacío)
+      const ref = this.filtros.hasta || new Date().toISOString().slice(0,10);
+      const [anio, mes] = ref.split('-');
+      return `/api/reportes/ventas-mes/export.xlsx?anio=${anio}&mes=${parseInt(mes,10)}`;
+    },
+    exportUrlTopClientes() {
+      return '/api/reportes/top-clientes/export.xlsx' + this._qs({
+        desde: this.filtros.desde, hasta: this.filtros.hasta, limit: 100,
+      });
+    },
+    exportUrlTopProductos() {
+      return '/api/reportes/top-productos/export.xlsx' + this._qs({
+        desde: this.filtros.desde, hasta: this.filtros.hasta, limit: 100,
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

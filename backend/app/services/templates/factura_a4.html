@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #000; line-height: 1.35; background: #fff; }
+  table { border-collapse: collapse; }
+  .w100 { width: 100%; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .b { font-weight: bold; }
+  .mb4 { margin-bottom: 4px; }
+  .mb8 { margin-bottom: 8px; }
+  .mb12 { margin-bottom: 12px; }
+  .mb16 { margin-bottom: 16px; }
+  .mt8 { margin-top: 8px; }
+
+  /* ── Cabecera (blaugrana) ── */
+  .empresa-nombre { font-size: 18px; font-weight: bold; color: #004D98; text-align: center; }
+  .empresa-info { font-size: 9px; color: #000; line-height: 1.55; text-align: center; }
+  .empresa-info b { font-weight: bold; color: #004D98; }
+  .empresa-web { margin-top:8px; font-size:10px; font-weight:bold; color:#004D98; }
+
+  /* ── Caja documento (borde azul + titulo grana) ── */
+  .doc-box {
+    border: 1.2px solid #004D98; padding: 14px 8px; text-align: center;
+    width: 100%;
+  }
+  .doc-tipo { font-size: 11px; font-weight: bold; color: #A50044; line-height: 1.3; }
+  .doc-meta { font-size: 10.5px; color: #000; margin-top: 10px; line-height: 1.45; }
+  .doc-meta b { color: #004D98; }
+
+  /* ── Bloque cliente ── */
+  .cli-grid td { padding: 1.5px 0; font-size: 10px; vertical-align: top; }
+  .cli-l1 { font-weight: bold; color: #004D98; }
+  .cli-l2 { font-weight: bold; color: #004D98; padding-left: 14px !important; }
+  .cli-c { padding: 0 5px !important; text-align: left; }
+  .cli-v { font-weight: bold; color: #000; }
+
+  /* ── Tabla items: header azul blaugrana con texto blanco ── */
+  .items {
+    border: 0.5px solid #004D98;
+  }
+  .items th {
+    background: #004D98; color: #fff; font-size: 10px; padding: 5px 6px;
+    border: 0.5px solid #004D98; font-weight: bold; text-align: center;
+    letter-spacing: 0.3px;
+  }
+  .items td {
+    padding: 3px 6px; font-size: 10px; border: 0.5px solid #888;
+    vertical-align: top; line-height: 1.3;
+  }
+  .items th.col-num { width: 30px; }
+  .items th.col-imp { width: 90px; }
+
+  /* ── Totales ── */
+  .tot-table { border-collapse: collapse; }
+  .tot-table td {
+    padding: 1.5px 6px; font-size: 10px; border: 0.5px solid #888;
+    font-family: Helvetica, Arial, sans-serif; letter-spacing: 0;
+    line-height: 1.15;
+  }
+  .tot-lbl { font-weight: bold; color: #000; }
+  .tot-mon { width: 36px; text-align: center; font-weight: bold; }
+  .tot-val { width: 80px; text-align: right; }
+  .tot-row-total td { background: #f6faff; }
+  .tot-row-total .tot-lbl { color: #004D98; font-weight: bold; }
+  .tot-row-total .tot-mon { color: #004D98; }
+  .tot-row-total .tot-val { color: #004D98; font-weight: bold; }
+
+  /* ── QR ── */
+  .qr-img { width: 75px; height: 75px; }
+
+  /* ── Pie ── */
+  .pie { font-size: 8.5px; color: #000; margin-top: 4px; }
+  .son-text { font-weight: bold; font-size: 10.5px; color: #000; margin: 8px 0 8px; }
+  .spot-box {
+    border: 1px solid #A50044; padding: 6px 10px; font-size: 10px;
+    text-align: center; font-weight: bold; margin: 8px 0; color: #A50044;
+  }
+  .footer-text {
+    font-size: 10px; font-weight: bold; color: #000; line-height: 1.6;
+    margin-top: 22px;
+  }
+  .footer-text b { color: #004D98; }
+</style>
+</head>
+<body>
+
+{% set num_parts = comprobante.numero_completo.split('-') %}
+{% set num_serie = num_parts[0] %}
+{% set num_corr = num_parts[1] | int %}
+{% set num_display = num_serie ~ ' - ' ~ '%07d' | format(num_corr) %}
+
+{% set ref_serie_disp = '' %}
+{% if comprobante.doc_referencia_serie %}
+  {% set ref_parts = comprobante.doc_referencia_serie.split('-') %}
+  {% if ref_parts | length == 2 %}
+    {% set ref_serie_disp = ref_parts[0] ~ '-' ~ '%07d' | format(ref_parts[1] | int) %}
+  {% else %}
+    {% set ref_serie_disp = comprobante.doc_referencia_serie %}
+  {% endif %}
+{% endif %}
+
+<!-- ═══════════════════ CABECERA 3 COLUMNAS ═══════════════════ -->
+<table class="w100 mb12" cellpadding="0" cellspacing="0" style="table-layout:fixed">
+<colgroup>
+  <col style="width:22%"/>
+  <col style="width:50%"/>
+  <col style="width:28%"/>
+</colgroup>
+<tr>
+  <!-- Logo izquierda -->
+  <td style="vertical-align:top;text-align:center;padding-top:4px">
+    {% if logo_b64 %}
+    <img src="data:image/png;base64,{{ logo_b64 }}" style="width:120px;height:auto;max-height:110px"/>
+    {% elif logo_path %}
+    <img src="{{ logo_path }}" style="width:120px;height:auto;max-height:110px"/>
+    {% endif %}
+  </td>
+
+  <!-- Centro: empresa -->
+  <td style="vertical-align:top;text-align:center;padding:8px 8px 0 8px">
+    <div class="empresa-nombre">{{ empresa.razon_social }}</div>
+    <div class="empresa-info" style="margin-top:6px">
+      {{ empresa.direccion or '' }}
+      {% if empresa.telefono %}<br/><b>Telefono:</b> {{ empresa.telefono }}{% endif %}
+      {% if empresa.email %}<br/><b>E-MAIL:</b> {{ empresa.email }}{% endif %}
+    </div>
+    {% if empresa.sitio_web %}
+    <div class="empresa-web">{{ empresa.sitio_web }}</div>
+    {% endif %}
+  </td>
+
+  <!-- Derecha: caja documento -->
+  <td style="vertical-align:top;padding-top:6px">
+    <table style="width:100%;border:1.2px solid #004D98;border-collapse:collapse" cellpadding="0" cellspacing="0">
+    <tr><td style="padding:14px 8px 14px 8px;text-align:center;border:none">
+      <div class="doc-tipo">{{ tipo_nombre }}</div>
+      <div class="doc-meta">
+        <b>RUC:</b> {{ empresa.ruc }}<br/>
+        {{ num_display }}
+      </div>
+    </td></tr>
+    </table>
+  </td>
+</tr>
+</table>
+
+<!-- ═══════════════════ DATOS CLIENTE ═══════════════════ -->
+{% set cli_doc_pe = comprobante.cliente_tipo_doc == '6' and comprobante.cliente_numero_doc and comprobante.cliente_numero_doc[:2] in ('10','15','17','20') %}
+{% set tipo_lbl = 'R.U.C.' if cli_doc_pe else ('DNI' if comprobante.cliente_tipo_doc == '1' else 'OTROS') %}
+{% set moneda_disp = 'SOLES' if comprobante.moneda == 'PEN' else 'DOLARES AMERICANOS' if comprobante.moneda == 'USD' else comprobante.moneda %}
+{% set fec_emi = comprobante.fecha_emision.strftime('%d/%m/%Y') if comprobante.fecha_emision and comprobante.fecha_emision.strftime is defined else (comprobante.fecha_emision or '') %}
+{% set fec_vto = (comprobante.fecha_vencimiento.strftime('%d/%m/%Y') if comprobante.fecha_vencimiento and comprobante.fecha_vencimiento.strftime is defined else (comprobante.fecha_vencimiento or '')) %}
+
+<table class="w100 mb12 cli-grid" cellpadding="0" cellspacing="0">
+<tr>
+  <td class="cli-l1" style="width:90px">Senor(es)</td>
+  <td class="cli-c" style="width:8px">:</td>
+  <td class="cli-v" style="width:34%">{{ comprobante.cliente_razon_social }}</td>
+  <td class="cli-l2" style="width:130px">Fecha de Emision</td>
+  <td class="cli-c" style="width:8px">:</td>
+  <td class="cli-v">{{ fec_emi }}</td>
+</tr>
+<tr>
+  <td class="cli-l1">{{ tipo_lbl }}</td>
+  <td class="cli-c">:</td>
+  <td class="cli-v">{{ comprobante.cliente_numero_doc }}</td>
+  <td class="cli-l2">Fecha de Vencimiento</td>
+  <td class="cli-c">:</td>
+  <td class="cli-v">{{ fec_vto }}</td>
+</tr>
+<tr>
+  <td class="cli-l1">Direccion</td>
+  <td class="cli-c">:</td>
+  <td class="cli-v">{{ comprobante.cliente_direccion or '' }}</td>
+  <td class="cli-l2">Moneda</td>
+  <td class="cli-c">:</td>
+  <td class="cli-v">{{ moneda_disp }}</td>
+</tr>
+{% if comprobante.tipo_documento != '07' %}
+<tr>
+  <td class="cli-l1" style="white-space:nowrap">Cond. de Pago</td>
+  <td class="cli-c">:</td>
+  <td class="cli-v">{{ (comprobante.forma_pago or 'CONTADO')|upper }}</td>
+  <td class="cli-l2">{% if comprobante.tipo_cambio and comprobante.tipo_cambio > 0 and comprobante.moneda != 'PEN' %}T/C.{% endif %}</td>
+  <td class="cli-c">{% if comprobante.tipo_cambio and comprobante.tipo_cambio > 0 and comprobante.moneda != 'PEN' %}:{% endif %}</td>
+  <td class="cli-v">{% if comprobante.tipo_cambio and comprobante.tipo_cambio > 0 and comprobante.moneda != 'PEN' %}{{ "%g"|format(comprobante.tipo_cambio) }}{% endif %}</td>
+</tr>
+{% else %}
+<tr>
+  <td class="cli-l1">Doc. Ref.</td>
+  <td class="cli-c">:</td>
+  <td class="cli-v">{{ ref_serie_disp }}</td>
+  <td class="cli-l2">{% if comprobante.tipo_cambio and comprobante.tipo_cambio > 0 and comprobante.moneda != 'PEN' %}T/C.{% endif %}</td>
+  <td class="cli-c">{% if comprobante.tipo_cambio and comprobante.tipo_cambio > 0 and comprobante.moneda != 'PEN' %}:{% endif %}</td>
+  <td class="cli-v">{% if comprobante.tipo_cambio and comprobante.tipo_cambio > 0 and comprobante.moneda != 'PEN' %}{{ "%g"|format(comprobante.tipo_cambio) }}{% endif %}</td>
+</tr>
+{% endif %}
+</table>
+
+<!-- ═══════════════════ TABLA DE ITEMS ═══════════════════ -->
+<table class="w100 items mb8" cellpadding="0" cellspacing="0">
+<thead>
+<tr>
+  <th class="col-num">N&deg;</th>
+  <th>Descripcion</th>
+  <th class="col-imp">Importe</th>
+</tr>
+</thead>
+<tbody>
+{% for d in detalles %}
+<tr>
+  <td class="center">{{ loop.index }}</td>
+  <td>{{ (d.descripcion or '').upper() }}</td>
+  <td class="right">{{ "{:,.2f}".format(d.valor_venta or 0) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+<!-- ═══════════════════ QR + TOTALES ═══════════════════ -->
+<table class="w100 mb8" cellpadding="0" cellspacing="0">
+<tr>
+  <td style="width:110px;vertical-align:top;padding-top:4px">
+    {% if qr_b64 %}<img src="data:image/png;base64,{{ qr_b64 }}" class="qr-img"/>{% endif %}
+  </td>
+  <td style="vertical-align:top">
+    {% set mon_sym = 'US$' if comprobante.moneda == 'USD' else ('EUR' if comprobante.moneda == 'EUR' else 'S/') %}
+    <table class="w100 tot-table" cellpadding="0" cellspacing="0">
+      <tr>
+        <td class="tot-lbl">Total Valor de Venta - Operaciones Gravadas</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_gravado or 0) }}</td>
+      </tr>
+      {% if (comprobante.total_exonerado or 0) > 0 %}
+      <tr>
+        <td class="tot-lbl">Total Valor de Venta - Operaciones Exoneradas</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_exonerado or 0) }}</td>
+      </tr>
+      {% endif %}
+      {% if (comprobante.total_inafecto or 0) > 0 %}
+      <tr>
+        <td class="tot-lbl">Total Valor de Venta - Operaciones Inafectas</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_inafecto or 0) }}</td>
+      </tr>
+      {% endif %}
+      {% if (comprobante.total_exportacion or 0) > 0 %}
+      <tr>
+        <td class="tot-lbl">Total Valor de Venta - Exportacion</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_exportacion or 0) }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td class="tot-lbl">IGV</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_igv or 0) }}</td>
+      </tr>
+      {% if (comprobante.total_isc or 0) > 0 %}
+      <tr>
+        <td class="tot-lbl">ISC</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_isc or 0) }}</td>
+      </tr>
+      {% endif %}
+      {% if (comprobante.total_icbper or 0) > 0 %}
+      <tr>
+        <td class="tot-lbl">ICBPER</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_icbper or 0) }}</td>
+      </tr>
+      {% endif %}
+      <tr class="tot-row-total">
+        <td class="tot-lbl"><b>Importe Total</b></td>
+        <td class="tot-mon"><b>{{ mon_sym }}</b></td>
+        <td class="tot-val"><b>{{ "{:,.2f}".format(comprobante.total_venta or 0) }}</b></td>
+      </tr>
+      {% if (comprobante.total_gratuito or 0) > 0 %}
+      <tr>
+        <td class="tot-lbl">Total Valor de Venta - Operaciones Gratuitas</td>
+        <td class="tot-mon">{{ mon_sym }}</td>
+        <td class="tot-val">{{ "{:,.2f}".format(comprobante.total_gratuito or 0) }}</td>
+      </tr>
+      {% endif %}
+    </table>
+  </td>
+</tr>
+</table>
+
+<div class="pie">Representacion Impresa de la {{ tipo_nombre|capitalize }}</div>
+
+<!-- ═══════════════════ MONTO EN LETRAS ═══════════════════ -->
+{% if comprobante.monto_letras %}
+{% set letras_clean = comprobante.monto_letras | upper %}
+{% if letras_clean.startswith('SON ') %}{% set letras_clean = letras_clean[4:] %}{% endif %}
+{% if letras_clean.startswith('SON: ') %}{% set letras_clean = letras_clean[5:] %}{% endif %}
+<div class="son-text">SON: {{ letras_clean }}</div>
+{% endif %}
+
+<!-- ═══════════════════ DETRACCION ═══════════════════ -->
+{% if comprobante.detraccion_codigo %}
+<div class="spot-box">
+  Operacion Sujeta al SPOT R.S Nro 045-2015/SUNAT
+  {% if comprobante.detraccion_cta_bn %} - Cta Cte. Bco. Nacion N. {{ comprobante.detraccion_cta_bn }}{% endif %}
+   - Cod. Op. {{ comprobante.detraccion_codigo }} - Tasa {{ "%.2f"|format(comprobante.detraccion_tasa or 0) }}%
+</div>
+{% endif %}
+
+<!-- ═══════════════════ CTA BANCARIA ═══════════════════ -->
+{% if config and config.cuenta_bcp %}
+<div class="footer-text">
+  <b>SIRVASE ABONAR A NUESTRA CUENTA EN EL SIGUIENTE BANCO EN {% if comprobante.moneda == 'USD' %}M.E.{% else %}M.N.{% endif %}</b><br/>
+  {{ config.cuenta_bcp }}
+</div>
+{% endif %}
+
+{% if config and config.pie_pagina %}
+<div class="footer-text" style="margin-top:8px">{{ config.pie_pagina }}</div>
+{% endif %}
+
+</body>
+</html>

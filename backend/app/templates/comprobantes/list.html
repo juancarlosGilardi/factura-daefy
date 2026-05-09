@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% from "components/_status_badge.html" import status_badge, tipo_doc_badge %}
+{% block title %}Comprobantes{% endblock %}
+{% block page_title %}Comprobantes{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="comprobantesList()" x-init="cargar(true)" class="space-y-4">
+
+  <!-- Encabezado y botones -->
+  <div class="flex flex-wrap justify-between items-center gap-3">
+    <div>
+      <h2 class="font-display font-semibold text-xl text-gray-800">Listado de comprobantes</h2>
+      <p class="text-sm text-gray-500">Facturas, boletas, notas de crédito y débito.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a :href="exportUrl()" :title="exportTooltip()"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blaugrana-grana-500 hover:bg-blaugrana-grana-600 text-white font-medium transition-colors shadow">
+        <span aria-hidden="true">📥</span>
+        Exportar Excel
+      </a>
+      <a href="/comprobantes/emitir"
+         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium transition-colors shadow">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Emitir nuevo
+      </a>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Tipo</label>
+        <select x-model="filtros.tipo" @change="cargar(true)"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <option value="">Todos</option>
+          <option value="01">Factura</option>
+          <option value="03">Boleta</option>
+          <option value="07">Nota Crédito</option>
+          <option value="08">Nota Débito</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Estado</label>
+        <select x-model="filtros.estado" @change="cargar(true)"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <option value="">Todos</option>
+          <option value="A">Aceptado</option>
+          <option value="P">Pendiente</option>
+          <option value="R">Rechazado</option>
+          <option value="B">Anulado</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Serie</label>
+        <select x-model="filtros.serie" @change="cargar(true)"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <option value="">Todas</option>
+          <template x-for="s in series" :key="s">
+            <option :value="s" x-text="s"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Desde</label>
+        <input type="date" x-model="filtros.desde" @change="cargar(true)"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Hasta</label>
+        <input type="date" x-model="filtros.hasta" @change="cargar(true)"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+    </div>
+    <div class="mt-3">
+      <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Buscar</label>
+      <div class="relative mt-1">
+        <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="text" placeholder="Buscar por número, cliente, RUC..."
+          x-model.debounce.400ms="filtros.q" @input="cargar(true)"
+          class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-visible">
+    <div class="overflow-x-auto overflow-y-visible">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+            <th class="px-4 py-3 font-semibold relative">
+              <div class="flex items-center gap-1">
+                <span @click="sortBy('numero_completo')" class="cursor-pointer select-none hover:text-blaugrana-700">
+                  Número
+                  <span x-show="sortField === 'numero_completo' && sortDir === 'asc'" aria-hidden="true">▲</span>
+                  <span x-show="sortField === 'numero_completo' && sortDir === 'desc'" aria-hidden="true">▼</span>
+                </span>
+                <button @click.stop="toggleFiltro('tipo_documento')"
+                        class="text-blaugrana-500 hover:bg-blaugrana-50 rounded p-1"
+                        :class="{'bg-blaugrana-50': (filtrosColumna.tipo_documento || []).length > 0}"
+                        :aria-expanded="filtroAbierto === 'tipo_documento'"
+                        aria-label="Filtrar por tipo">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                  </svg>
+                </button>
+              </div>
+              <div x-show="filtroAbierto === 'tipo_documento'" x-cloak @click.outside="filtroAbierto = null" class="absolute left-0 z-30 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 normal-case font-normal text-gray-800">
+                <input type="text" x-model="filtroBusqueda.tipo_documento" placeholder="Buscar..." class="w-full border rounded px-2 py-1 mb-2 text-sm">
+                <div class="max-h-48 overflow-y-auto space-y-1">
+                  <template x-for="val in valoresUnicos('tipo_documento')" :key="val">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" :value="val" x-model="filtrosColumna.tipo_documento">
+                      <span x-text="tipoLabel(val) + ' (' + val + ')'"></span>
+                    </label>
+                  </template>
+                </div>
+                <div class="flex justify-between mt-3 pt-2 border-t">
+                  <button @click="filtrosColumna.tipo_documento = []" class="text-xs text-slate-500 hover:underline">Limpiar</button>
+                  <button @click="filtroAbierto = null" class="text-xs bg-blaugrana-500 hover:bg-blaugrana-600 text-white px-3 py-1 rounded">Cerrar</button>
+                </div>
+              </div>
+            </th>
+            <th @click="sortBy('fecha_emision')" class="px-4 py-3 font-semibold cursor-pointer select-none hover:text-blaugrana-700">
+              Fecha
+              <span x-show="sortField === 'fecha_emision' && sortDir === 'asc'" aria-hidden="true">▲</span>
+              <span x-show="sortField === 'fecha_emision' && sortDir === 'desc'" aria-hidden="true">▼</span>
+            </th>
+            <th @click="sortBy('cliente_razon_social')" class="px-4 py-3 font-semibold cursor-pointer select-none hover:text-blaugrana-700">
+              Cliente
+              <span x-show="sortField === 'cliente_razon_social' && sortDir === 'asc'" aria-hidden="true">▲</span>
+              <span x-show="sortField === 'cliente_razon_social' && sortDir === 'desc'" aria-hidden="true">▼</span>
+            </th>
+            <th class="px-4 py-3 font-semibold text-right relative">
+              <div class="flex items-center gap-1 justify-end">
+                <span @click="sortBy('total_venta')" class="cursor-pointer select-none hover:text-blaugrana-700">
+                  Total
+                  <span x-show="sortField === 'total_venta' && sortDir === 'asc'" aria-hidden="true">▲</span>
+                  <span x-show="sortField === 'total_venta' && sortDir === 'desc'" aria-hidden="true">▼</span>
+                </span>
+                <button @click.stop="toggleFiltro('moneda')"
+                        class="text-blaugrana-500 hover:bg-blaugrana-50 rounded p-1"
+                        :class="{'bg-blaugrana-50': (filtrosColumna.moneda || []).length > 0}"
+                        :aria-expanded="filtroAbierto === 'moneda'"
+                        aria-label="Filtrar por moneda">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                  </svg>
+                </button>
+              </div>
+              <div x-show="filtroAbierto === 'moneda'" x-cloak @click.outside="filtroAbierto = null" class="absolute right-0 z-30 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-left normal-case font-normal text-gray-800">
+                <input type="text" x-model="filtroBusqueda.moneda" placeholder="Buscar..." class="w-full border rounded px-2 py-1 mb-2 text-sm">
+                <div class="max-h-48 overflow-y-auto space-y-1">
+                  <template x-for="val in valoresUnicos('moneda')" :key="val">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" :value="val" x-model="filtrosColumna.moneda">
+                      <span x-text="val"></span>
+                    </label>
+                  </template>
+                </div>
+                <div class="flex justify-between mt-3 pt-2 border-t">
+                  <button @click="filtrosColumna.moneda = []" class="text-xs text-slate-500 hover:underline">Limpiar</button>
+                  <button @click="filtroAbierto = null" class="text-xs bg-blaugrana-500 hover:bg-blaugrana-600 text-white px-3 py-1 rounded">Cerrar</button>
+                </div>
+              </div>
+            </th>
+            <th class="px-4 py-3 font-semibold relative">
+              <div class="flex items-center gap-1">
+                <span @click="sortBy('estado')" class="cursor-pointer select-none hover:text-blaugrana-700">
+                  Estado
+                  <span x-show="sortField === 'estado' && sortDir === 'asc'" aria-hidden="true">▲</span>
+                  <span x-show="sortField === 'estado' && sortDir === 'desc'" aria-hidden="true">▼</span>
+                </span>
+                <button @click.stop="toggleFiltro('estado')"
+                        class="text-blaugrana-500 hover:bg-blaugrana-50 rounded p-1"
+                        :class="{'bg-blaugrana-50': (filtrosColumna.estado || []).length > 0}"
+                        :aria-expanded="filtroAbierto === 'estado'"
+                        aria-label="Filtrar por estado">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                  </svg>
+                </button>
+              </div>
+              <div x-show="filtroAbierto === 'estado'" x-cloak @click.outside="filtroAbierto = null" class="absolute left-0 z-30 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg p-3 normal-case font-normal text-gray-800">
+                <input type="text" x-model="filtroBusqueda.estado" placeholder="Buscar..." class="w-full border rounded px-2 py-1 mb-2 text-sm">
+                <div class="max-h-48 overflow-y-auto space-y-1">
+                  <template x-for="val in valoresUnicos('estado')" :key="val">
+                    <label class="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" :value="val" x-model="filtrosColumna.estado">
+                      <span x-text="estadoLabel(val) + ' (' + val + ')'"></span>
+                    </label>
+                  </template>
+                </div>
+                <div class="flex justify-between mt-3 pt-2 border-t">
+                  <button @click="filtrosColumna.estado = []" class="text-xs text-slate-500 hover:underline">Limpiar</button>
+                  <button @click="filtroAbierto = null" class="text-xs bg-blaugrana-500 hover:bg-blaugrana-600 text-white px-3 py-1 rounded">Cerrar</button>
+                </div>
+              </div>
+            </th>
+            <th class="px-4 py-3 font-semibold text-center">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if="!loading && comprobantesFiltrados.length === 0">
+            <tr>
+              <td colspan="6" class="px-4 py-12 text-center text-gray-400">
+                <svg class="w-14 h-14 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <p class="mt-3 font-medium">No hay comprobantes que coincidan con los filtros</p>
+                <a href="/comprobantes/emitir" class="text-blaugrana-grana-500 hover:underline mt-2 inline-block">
+                  Emitir uno nuevo →
+                </a>
+              </td>
+            </tr>
+          </template>
+
+          <template x-for="c in comprobantesFiltrados" :key="c.id">
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        :class="{
+                          '01': 'bg-blaugrana-50 text-blaugrana-700',
+                          '03': 'bg-blaugrana-grana-50 text-blaugrana-grana-700',
+                          '07': 'bg-purple-50 text-purple-700',
+                          '08': 'bg-orange-50 text-orange-700'
+                        }[c.tipo_documento] || 'bg-gray-100 text-gray-700'"
+                        x-text="tipoLabel(c.tipo_documento)"></span>
+                  <a :href="'/comprobantes/' + c.id" class="font-medium text-blaugrana-700 hover:underline" x-text="c.numero_completo"></a>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-600" x-text="c.fecha_emision"></td>
+              <td class="px-4 py-3">
+                <div class="font-medium text-gray-800" x-text="c.cliente_razon_social"></div>
+                <div class="text-xs text-gray-500" x-text="docTipoLabel(c.cliente_tipo_doc) + ' ' + c.cliente_numero_doc"></div>
+              </td>
+              <td class="px-4 py-3 text-right font-medium text-gray-800">
+                <span x-text="monedaSimbolo(c.moneda) + ' ' + (c.total_venta || 0).toFixed(2)"></span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border"
+                      :class="estadoClase(c.estado)"
+                      x-text="estadoLabel(c.estado)"></span>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-center gap-1">
+                  <a :href="'/comprobantes/' + c.id" title="Ver" class="p-1.5 hover:bg-gray-100 rounded text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                  </a>
+                  <a :href="'/api/comprobantes/' + c.id + '/pdf'" title="PDF" target="_blank" class="p-1.5 hover:bg-gray-100 rounded text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                  </a>
+                  <a :href="'/api/comprobantes/' + c.id + '/xml'" title="XML" target="_blank" class="p-1.5 hover:bg-gray-100 rounded text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                    </svg>
+                  </a>
+                  <a x-show="c.estado === 'A'" :href="'/api/comprobantes/' + c.id + '/cdr'" title="CDR" target="_blank" class="p-1.5 hover:bg-gray-100 rounded text-green-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          </template>
+
+          <template x-if="loading && comprobantes.length === 0">
+            <tr>
+              <td colspan="6" class="px-4 py-10 text-center text-gray-400">
+                <svg class="animate-spin w-8 h-8 mx-auto" fill="none" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"></circle>
+                  <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"></path>
+                </svg>
+                <div class="mt-2">Cargando...</div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <div x-show="comprobantes.length > 0" class="flex justify-center py-4 border-t border-gray-100">
+      <button x-show="hasMore" @click="cargar(false)" :disabled="loading"
+        class="px-5 py-2 rounded-lg border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50 disabled:opacity-50">
+        <span x-show="!loading">Cargar más</span>
+        <span x-show="loading">Cargando...</span>
+      </button>
+      <div x-show="!hasMore" class="text-sm text-gray-400">No hay más resultados</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function comprobantesList() {
+  return {
+    filtros: { tipo: '', estado: '', serie: '', desde: '', hasta: '', q: '' },
+    comprobantes: [],
+    series: [],
+    loading: false,
+    hasMore: false,
+    offset: 0,
+    limit: 50,
+
+    // Sort
+    sortField: null,
+    sortDir: 'asc',
+
+    // Filtro por columna tipo Excel
+    filtroAbierto: null,
+    filtroBusqueda: {},
+    filtrosColumna: { tipo_documento: [], estado: [], moneda: [] },
+
+    async cargar(reset = false) {
+      if (reset) {
+        this.offset = 0;
+        this.comprobantes = [];
+      }
+      this.loading = true;
+      try {
+        const params = new URLSearchParams();
+        Object.entries(this.filtros).forEach(([k, v]) => { if (v) params.append(k, v); });
+        params.append('offset', this.offset);
+        params.append('limit', this.limit);
+        const res = await fetch('/api/comprobantes?' + params.toString());
+        if (!res.ok) throw new Error('Error al cargar comprobantes');
+        const data = await res.json();
+        const items = data.items || data;
+        this.comprobantes.push(...items);
+        this.hasMore = items.length === this.limit;
+        this.offset += items.length;
+        if (this.series.length === 0) await this.cargarSeries();
+      } catch (e) {
+        window.toast('error', e.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async cargarSeries() {
+      try {
+        const res = await fetch('/api/correlativos');
+        if (!res.ok) return;
+        const data = await res.json();
+        this.series = (data.items || data).map(s => s.serie).filter((v, i, a) => a.indexOf(v) === i);
+      } catch (e) { /* silent */ }
+    },
+
+    // ===== Sort =====
+    sortBy(field) {
+      if (this.sortField === field) {
+        this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        this.sortField = field;
+        this.sortDir = 'asc';
+      }
+    },
+    get comprobantesOrdenados() {
+      if (!this.sortField) return this.comprobantes;
+      const f = this.sortField, d = this.sortDir;
+      return [...this.comprobantes].sort((a, b) => {
+        const va = a[f], vb = b[f];
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        if (va < vb) return d === 'asc' ? -1 : 1;
+        if (va > vb) return d === 'asc' ? 1 : -1;
+        return 0;
+      });
+    },
+
+    // ===== Filtro por columna =====
+    toggleFiltro(field) {
+      this.filtroAbierto = this.filtroAbierto === field ? null : field;
+    },
+    valoresUnicos(field) {
+      const vals = [...new Set(this.comprobantes.map(i => i[field]).filter(v => v != null))];
+      const busq = (this.filtroBusqueda[field] || '').toString().toLowerCase();
+      return vals.filter(v => String(v).toLowerCase().includes(busq)).sort();
+    },
+    get comprobantesFiltrados() {
+      return this.comprobantesOrdenados.filter(item => {
+        return Object.entries(this.filtrosColumna).every(([f, vals]) => {
+          if (!vals || vals.length === 0) return true;
+          return vals.includes(item[f]);
+        });
+      });
+    },
+    hayFiltrosColumna() {
+      return Object.values(this.filtrosColumna).some(v => v && v.length > 0);
+    },
+
+    // ===== Export Excel =====
+    exportUrl() {
+      const params = new URLSearchParams();
+      Object.entries(this.filtros).forEach(([k, v]) => { if (v) params.append(k, v); });
+      const qs = params.toString();
+      return '/api/comprobantes/export.xlsx' + (qs ? '?' + qs : '');
+    },
+    exportTooltip() {
+      const base = 'Exporta todos los registros del filtro principal a Excel.';
+      return this.hayFiltrosColumna()
+        ? base + ' Los filtros por columna no se incluyen aún en la exportación.'
+        : base;
+    },
+
+    tipoLabel(t) { return { '01': 'Factura', '03': 'Boleta', '07': 'NC', '08': 'ND' }[t] || t; },
+    docTipoLabel(t) { return { '1': 'DNI', '6': 'RUC', '4': 'CE', '7': 'PAS', '0': 'S/D' }[t] || ''; },
+    monedaSimbolo(m) { return { 'PEN': 'S/', 'USD': '$', 'EUR': '€' }[m] || m; },
+    estadoLabel(e) { return { 'A': 'Aceptado', 'P': 'Pendiente', 'R': 'Rechazado', 'B': 'Anulado', 'X': 'Comunic. baja' }[e] || e; },
+    estadoClase(e) {
+      return {
+        'A': 'bg-green-100 text-green-700 border-green-200',
+        'P': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        'R': 'bg-red-100 text-red-700 border-red-200',
+        'B': 'bg-gray-200 text-gray-600 border-gray-300',
+        'X': 'bg-blaugrana-grana-50 text-blaugrana-grana-700 border-blaugrana-grana-200',
+      }[e] || 'bg-gray-100 text-gray-700 border-gray-200';
+    },
+  };
+}
+</script>
+{% endblock %}

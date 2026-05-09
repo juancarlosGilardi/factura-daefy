@@ -1,0 +1,24 @@
+{# Paginación tipo "Cargar más" — Alpine #}
+{% macro pagination_loadmore(loading_var='loading', has_more_var='hasMore', click_handler='cargarMas()') -%}
+<div class="flex justify-center py-4">
+  <button
+    type="button"
+    x-show="{{ has_more_var }}"
+    @click="{{ click_handler }}"
+    :disabled="{{ loading_var }}"
+    class="px-5 py-2 rounded-lg border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50 disabled:opacity-50 transition-colors"
+  >
+    <span x-show="!{{ loading_var }}">Cargar más</span>
+    <span x-show="{{ loading_var }}" class="flex items-center gap-2">
+      <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"></circle>
+        <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"></path>
+      </svg>
+      Cargando...
+    </span>
+  </button>
+  <div x-show="!{{ has_more_var }} && !{{ loading_var }}" class="text-sm text-gray-400">
+    No hay más resultados
+  </div>
+</div>
+{%- endmacro %}

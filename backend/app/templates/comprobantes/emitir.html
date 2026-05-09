@@ -1,0 +1,783 @@
+{% extends "base.html" %}
+{% block title %}Emitir comprobante{% endblock %}
+{% block page_title %}Emitir comprobante{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="emitirForm()" x-init="init()" class="max-w-5xl mx-auto space-y-5">
+
+  <!-- Sección 1: Tipo -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">1</span>
+      Tipo de comprobante
+    </h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <template x-for="t in tiposDoc" :key="t.code">
+        <label class="cursor-pointer border-2 rounded-lg px-4 py-3 transition-all"
+               :class="form.tipo_documento === t.code ? 'border-blaugrana-500 bg-blaugrana-50' : 'border-gray-200 hover:border-gray-300'">
+          <input type="radio" :value="t.code" x-model="form.tipo_documento" @change="onTipoChange()" class="hidden"/>
+          <div class="font-medium text-gray-800" x-text="t.label"></div>
+          <div class="text-xs text-gray-500 mt-0.5" x-text="t.desc"></div>
+        </label>
+      </template>
+    </div>
+
+    <!-- Doc referencia para NC/ND -->
+    <div x-show="['07','08'].includes(form.tipo_documento)" class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Doc. referencia (serie-correlativo)</label>
+        <input type="text" x-model="form.doc_referencia_serie" placeholder="F001-00000123"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none uppercase"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Tipo doc. ref.</label>
+        <select x-model="form.doc_referencia_tipo"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <option value="01">Factura</option>
+          <option value="03">Boleta</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Motivo</label>
+        <select x-model="form.motivo_nc_codigo"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <template x-for="m in (form.tipo_documento === '07' ? motivosNC : motivosND)" :key="m.codigo">
+            <option :value="m.codigo" x-text="m.codigo + ' - ' + m.descripcion"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sección 2: Cliente -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">2</span>
+      Cliente
+    </h3>
+    <div class="relative">
+      <input type="text" x-model="clienteQuery" @input.debounce.300ms="buscarClientes()" @focus="mostrarSugerencias = true"
+        placeholder="Buscar cliente por RUC, DNI o nombre..."
+        class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      <div x-show="mostrarSugerencias && sugerencias.length > 0" @click.outside="mostrarSugerencias = false"
+        class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        <template x-for="cli in sugerencias" :key="cli.id">
+          <button type="button" @click="seleccionarCliente(cli)"
+            class="w-full text-left px-4 py-2 hover:bg-blaugrana-50 border-b border-gray-100">
+            <div class="font-medium text-gray-800" x-text="cli.razon_social"></div>
+            <div class="text-xs text-gray-500" x-text="docLabel(cli.tipo_documento) + ' ' + cli.numero_documento"></div>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="form.cliente_id || form.cliente_numero_doc" class="mt-3 p-3 bg-blaugrana-50 rounded-lg border border-blaugrana-100">
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="font-medium text-gray-800" x-text="form.cliente_razon_social"></div>
+          <div class="text-sm text-gray-600" x-text="docLabel(form.cliente_tipo_doc) + ' ' + form.cliente_numero_doc"></div>
+          <div x-show="form.cliente_direccion" class="text-xs text-gray-500 mt-1" x-text="form.cliente_direccion"></div>
+        </div>
+        <button type="button" @click="limpiarCliente()" class="text-gray-400 hover:text-red-500">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button type="button" @click="modalCliente = true"
+        class="px-3 py-1.5 text-sm rounded-lg border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50">
+        + Crear cliente nuevo
+      </button>
+      <button type="button" @click="window.toast('info', 'Búsqueda en SUNAT próximamente')"
+        class="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">
+        Buscar en SUNAT por RUC
+      </button>
+    </div>
+  </section>
+
+  <!-- Sección 3: Datos generales -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">3</span>
+      Datos generales
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Serie</label>
+        <select x-model="form.serie" @change="cargarProximoCorrelativo()"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <template x-for="s in seriesFiltradas" :key="s">
+            <option :value="s" x-text="s"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Correlativo</label>
+        <input type="number" x-model="form.correlativo" readonly
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50 text-gray-700"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Fecha emisión</label>
+        <input type="date" x-model="form.fecha_emision"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Moneda</label>
+        <select x-model="form.moneda" @change="onMonedaChange()"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <option value="PEN">PEN — Soles</option>
+          <option value="USD">USD — Dólares</option>
+          <option value="EUR">EUR — Euros</option>
+        </select>
+      </div>
+      <div x-show="form.moneda !== 'PEN'">
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Tipo de cambio</label>
+        <input type="number" step="0.001" x-model.number="form.tipo_cambio"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sección 4: Items -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">4</span>
+      Items
+    </h3>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+            <th class="px-2 py-2 w-10">#</th>
+            <th class="px-2 py-2 min-w-[280px]">Producto / Descripción</th>
+            <th class="px-2 py-2 w-20">UM</th>
+            <th class="px-2 py-2 w-24 text-right">Cantidad</th>
+            <th class="px-2 py-2 w-28 text-right">V. Unit.</th>
+            <th class="px-2 py-2 w-24">Afect. IGV</th>
+            <th class="px-2 py-2 w-28 text-right">IGV</th>
+            <th class="px-2 py-2 w-28 text-right">Total</th>
+            <th class="px-2 py-2 w-10"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(it, idx) in form.items" :key="idx">
+            <tr class="border-b border-gray-100">
+              <td class="px-2 py-2 text-gray-500" x-text="idx + 1"></td>
+              <td class="px-2 py-2">
+                <div class="relative">
+                  <input type="text" x-model="it.descripcion" @focus="abrirBuscadorProducto(idx)" @input.debounce.300ms="buscarProductos(idx)"
+                    placeholder="Buscar producto o escribir descripción..."
+                    class="w-full border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-blaugrana-500 outline-none"/>
+                  <div x-show="it._mostrarSug && (it._sug || []).length > 0" @click.outside="it._mostrarSug = false"
+                    class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    <template x-for="prod in it._sug" :key="prod.id">
+                      <button type="button" @click="seleccionarProducto(idx, prod)"
+                        class="w-full text-left px-3 py-1.5 hover:bg-blaugrana-50 border-b border-gray-100 text-sm">
+                        <div class="font-medium text-gray-800" x-text="prod.descripcion"></div>
+                        <div class="text-xs text-gray-500" x-text="prod.codigo + ' • ' + prod.unidad_medida + ' • S/ ' + prod.valor_unitario"></div>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </td>
+              <td class="px-2 py-2">
+                <input type="text" x-model="it.unidad_medida" maxlength="8"
+                  class="w-full border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-blaugrana-500 outline-none uppercase"/>
+              </td>
+              <td class="px-2 py-2">
+                <input type="number" step="0.001" min="0" x-model.number="it.cantidad" @input="recalcLinea(idx)"
+                  class="w-full border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-blaugrana-500 outline-none"/>
+              </td>
+              <td class="px-2 py-2">
+                <input type="number" step="0.01" min="0" x-model.number="it.valor_unitario" @input="recalcLinea(idx)"
+                  class="w-full border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-blaugrana-500 outline-none"/>
+              </td>
+              <td class="px-2 py-2">
+                <select x-model="it.tipo_afectacion_igv" @change="recalcLinea(idx)"
+                  class="w-full border border-gray-300 rounded px-1 py-1 text-xs focus:ring-1 focus:ring-blaugrana-500 outline-none">
+                  <option value="10">Gravado</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                  <option value="40">Exportación</option>
+                </select>
+              </td>
+              <td class="px-2 py-2 text-right text-gray-700" x-text="(it.igv_monto || 0).toFixed(2)"></td>
+              <td class="px-2 py-2 text-right font-medium text-gray-800" x-text="(it.total_linea || 0).toFixed(2)"></td>
+              <td class="px-2 py-2">
+                <button type="button" @click="eliminarItem(idx)" class="text-red-400 hover:text-red-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <button type="button" @click="agregarItem()"
+      class="mt-3 px-3 py-1.5 rounded-lg border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50 text-sm">
+      + Agregar item
+    </button>
+
+    <!-- Totales -->
+    <div class="mt-4 flex justify-end">
+      <div class="w-72 space-y-1">
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Op. gravadas</span>
+          <span x-text="totales.gravado.toFixed(2)"></span>
+        </div>
+        <div class="flex justify-between text-sm text-gray-600" x-show="totales.exonerado > 0">
+          <span>Op. exoneradas</span>
+          <span x-text="totales.exonerado.toFixed(2)"></span>
+        </div>
+        <div class="flex justify-between text-sm text-gray-600" x-show="totales.inafecto > 0">
+          <span>Op. inafectas</span>
+          <span x-text="totales.inafecto.toFixed(2)"></span>
+        </div>
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>IGV (18%)</span>
+          <span x-text="totales.igv.toFixed(2)"></span>
+        </div>
+        <div class="flex justify-between text-base font-bold text-gray-900 border-t border-gray-200 pt-2 mt-2">
+          <span>Total</span>
+          <span x-text="monedaSimbolo() + ' ' + totales.total.toFixed(2)"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sección 5: Pago -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">5</span>
+      Forma de pago
+    </h3>
+    <div class="flex gap-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="radio" value="Contado" x-model="form.forma_pago" class="w-4 h-4 text-blaugrana-500"/>
+        <span>Contado</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="radio" value="Credito" x-model="form.forma_pago" class="w-4 h-4 text-blaugrana-500"/>
+        <span>Crédito</span>
+      </label>
+    </div>
+
+    <div x-show="form.forma_pago === 'Credito'" class="mt-4">
+      <table class="text-sm">
+        <thead>
+          <tr class="text-xs uppercase tracking-wider text-gray-600">
+            <th class="px-2 py-1 text-left">#</th>
+            <th class="px-2 py-1 text-left">Fecha venc.</th>
+            <th class="px-2 py-1 text-right">Monto</th>
+            <th class="px-2 py-1"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(c, idx) in form.cuotas" :key="idx">
+            <tr>
+              <td class="px-2 py-1 text-gray-500" x-text="idx + 1"></td>
+              <td class="px-2 py-1">
+                <input type="date" x-model="c.fecha"
+                  class="border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-blaugrana-500 outline-none"/>
+              </td>
+              <td class="px-2 py-1">
+                <input type="number" step="0.01" x-model.number="c.monto"
+                  class="border border-gray-300 rounded px-2 py-1 text-right w-32 focus:ring-1 focus:ring-blaugrana-500 outline-none"/>
+              </td>
+              <td class="px-2 py-1">
+                <button type="button" @click="form.cuotas.splice(idx,1)" class="text-red-400 hover:text-red-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <button type="button" @click="form.cuotas.push({fecha: '', monto: 0})"
+        class="mt-2 px-3 py-1 text-sm rounded border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50">
+        + Agregar cuota
+      </button>
+      <div class="mt-2 text-sm" :class="cuotasOk ? 'text-green-600' : 'text-red-600'">
+        <span x-text="'Suma cuotas: ' + sumaCuotas.toFixed(2) + ' / Total: ' + totales.total.toFixed(2)"></span>
+        <span x-show="!cuotasOk"> ❗ debe coincidir</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sección 6: Detracción -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">6</span>
+      Detracción <span class="text-sm font-normal text-gray-500">(opcional)</span>
+    </h3>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" x-model="form.aplica_detraccion" class="w-4 h-4 text-blaugrana-500"/>
+      <span>Aplica detracción</span>
+    </label>
+    <div x-show="form.aplica_detraccion" class="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Código bien/servicio</label>
+        <select x-model="form.detraccion_codigo" @change="onDetraccionCodigo()"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none">
+          <template x-for="d in catalogoDetraccion" :key="d.codigo">
+            <option :value="d.codigo" x-text="d.codigo + ' - ' + d.descripcion"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Porcentaje</label>
+        <input type="number" step="0.01" x-model.number="form.detraccion_tasa"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Monto</label>
+        <input type="text" :value="(totales.total * (form.detraccion_tasa || 0) / 100).toFixed(2)" readonly
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-50"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Cuenta BN</label>
+        <input type="text" x-model="form.detraccion_cta_bn"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"/>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sección 7: Observaciones -->
+  <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <h3 class="font-display font-semibold text-lg text-gray-800 mb-4">
+      <span class="inline-block w-7 h-7 rounded-full bg-blaugrana-500 text-white text-sm font-bold text-center leading-7 mr-2">7</span>
+      Observaciones
+    </h3>
+    <textarea x-model="form.observaciones" rows="3" placeholder="Notas o comentarios visibles en el comprobante..."
+      class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blaugrana-500 focus:border-blaugrana-500 outline-none"></textarea>
+  </section>
+
+  <!-- Botones -->
+  <div class="flex flex-wrap justify-end gap-3 sticky bottom-0 bg-gray-50 -mx-6 px-6 py-4 border-t border-gray-200">
+    <a href="/comprobantes" class="px-5 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-100">Cancelar</a>
+    <button type="button" @click="modalPreview = true"
+      class="px-5 py-2.5 rounded-lg border border-blaugrana-500 text-blaugrana-500 hover:bg-blaugrana-50">
+      Vista previa
+    </button>
+    <button type="button" @click="emitir()" :disabled="emitiendo || !puedeEmitir"
+      class="px-5 py-2.5 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium disabled:opacity-50">
+      <span x-show="!emitiendo">Emitir</span>
+      <span x-show="emitiendo" class="flex items-center gap-2">
+        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"></circle>
+          <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"></path>
+        </svg>
+        Enviando...
+      </span>
+    </button>
+  </div>
+
+  <!-- Modal Cliente Nuevo -->
+  <div x-show="modalCliente" x-transition.opacity style="display:none"
+    class="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4" @keydown.escape.window="modalCliente=false">
+    <div @click.outside="modalCliente=false" class="bg-white rounded-xl shadow-2xl max-w-md w-full">
+      <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="font-display font-semibold text-gray-800">Crear cliente</h3>
+        <button @click="modalCliente=false" class="text-gray-400 hover:text-gray-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Tipo doc</label>
+          <select x-model="nuevoCliente.tipo_documento" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500">
+            <option value="6">RUC</option>
+            <option value="1">DNI</option>
+            <option value="4">Carnet ext.</option>
+            <option value="7">Pasaporte</option>
+            <option value="0">Sin documento</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Número documento</label>
+          <input type="text" x-model="nuevoCliente.numero_documento" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Razón social / nombre</label>
+          <input type="text" x-model="nuevoCliente.razon_social" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Dirección</label>
+          <input type="text" x-model="nuevoCliente.direccion" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 bg-gray-50">
+        <button @click="modalCliente=false" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">Cancelar</button>
+        <button @click="crearCliente()" class="px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white">Crear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Vista previa -->
+  <div x-show="modalPreview" x-transition.opacity style="display:none"
+    class="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4" @keydown.escape.window="modalPreview=false">
+    <div @click.outside="modalPreview=false" class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="font-display font-semibold text-gray-800">Vista previa</h3>
+        <button @click="modalPreview=false" class="text-gray-400 hover:text-gray-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1 space-y-3">
+        <div class="border-2 border-blaugrana-500 rounded-xl p-5">
+          <div class="flex justify-between">
+            <div>
+              <div class="text-xs text-gray-500">Tipo</div>
+              <div class="font-display font-bold text-lg" x-text="tiposDoc.find(t=>t.code===form.tipo_documento)?.label || ''"></div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-gray-500">N°</div>
+              <div class="font-display font-bold text-lg text-blaugrana-500" x-text="form.serie + '-' + (form.correlativo || '').toString().padStart(8,'0')"></div>
+            </div>
+          </div>
+          <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-xs uppercase text-gray-500">Cliente</div>
+              <div class="font-medium" x-text="form.cliente_razon_social"></div>
+              <div class="text-xs text-gray-500" x-text="docLabel(form.cliente_tipo_doc) + ' ' + form.cliente_numero_doc"></div>
+            </div>
+            <div>
+              <div class="text-xs uppercase text-gray-500">Fecha</div>
+              <div x-text="form.fecha_emision"></div>
+            </div>
+          </div>
+          <table class="mt-4 w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase">
+              <tr>
+                <th class="px-2 py-1 text-left">Descripción</th>
+                <th class="px-2 py-1 text-right">Cant.</th>
+                <th class="px-2 py-1 text-right">V.U.</th>
+                <th class="px-2 py-1 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(it, idx) in form.items" :key="idx">
+                <tr class="border-t border-gray-100">
+                  <td class="px-2 py-1" x-text="it.descripcion"></td>
+                  <td class="px-2 py-1 text-right" x-text="(it.cantidad || 0).toFixed(2)"></td>
+                  <td class="px-2 py-1 text-right" x-text="(it.valor_unitario || 0).toFixed(2)"></td>
+                  <td class="px-2 py-1 text-right" x-text="(it.total_linea || 0).toFixed(2)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="mt-3 text-right space-y-1 text-sm">
+            <div>IGV: <span x-text="totales.igv.toFixed(2)"></span></div>
+            <div class="font-bold text-base">Total: <span x-text="monedaSimbolo() + ' ' + totales.total.toFixed(2)"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 bg-gray-50">
+        <button @click="modalPreview=false" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">Cerrar</button>
+        <button @click="modalPreview=false; emitir()" class="px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white">Emitir ahora</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function emitirForm() {
+  return {
+    tiposDoc: [
+      { code: '01', label: 'Factura', desc: 'A empresas con RUC' },
+      { code: '03', label: 'Boleta', desc: 'A consumidor final' },
+      { code: '07', label: 'Nota Crédito', desc: 'Anular / corregir' },
+      { code: '08', label: 'Nota Débito', desc: 'Cargar adicional' },
+    ],
+    motivosNC: [
+      { codigo: '01', descripcion: 'Anulación de la operación' },
+      { codigo: '02', descripcion: 'Anulación por error en el RUC' },
+      { codigo: '03', descripcion: 'Corrección por error en la descripción' },
+      { codigo: '04', descripcion: 'Descuento global' },
+      { codigo: '05', descripcion: 'Descuento por ítem' },
+      { codigo: '06', descripcion: 'Devolución total' },
+      { codigo: '07', descripcion: 'Devolución por ítem' },
+      { codigo: '08', descripcion: 'Bonificación' },
+      { codigo: '09', descripcion: 'Disminución en el valor' },
+      { codigo: '10', descripcion: 'Otros conceptos' },
+    ],
+    motivosND: [
+      { codigo: '01', descripcion: 'Intereses por mora' },
+      { codigo: '02', descripcion: 'Aumento en el valor' },
+      { codigo: '03', descripcion: 'Penalidades / otros conceptos' },
+    ],
+    catalogoDetraccion: [
+      { codigo: '037', descripcion: 'Demás servicios gravados con IGV', tasa: 12 },
+      { codigo: '022', descripcion: 'Servicios empresariales', tasa: 12 },
+      { codigo: '030', descripcion: 'Contratos de construcción', tasa: 4 },
+      { codigo: '019', descripcion: 'Arrendamiento de bienes', tasa: 10 },
+    ],
+    series: [],
+    form: {
+      tipo_documento: '01',
+      serie: '',
+      correlativo: 0,
+      fecha_emision: new Date().toISOString().slice(0, 10),
+      moneda: 'PEN',
+      tipo_cambio: 1.0,
+      cliente_id: null,
+      cliente_tipo_doc: '6',
+      cliente_numero_doc: '',
+      cliente_razon_social: '',
+      cliente_direccion: '',
+      items: [],
+      forma_pago: 'Contado',
+      cuotas: [],
+      aplica_detraccion: false,
+      detraccion_codigo: '',
+      detraccion_tasa: 0,
+      detraccion_cta_bn: '',
+      observaciones: '',
+      doc_referencia_tipo: '01',
+      doc_referencia_serie: '',
+      motivo_nc_codigo: '01',
+    },
+    clienteQuery: '',
+    sugerencias: [],
+    mostrarSugerencias: false,
+    modalCliente: false,
+    modalPreview: false,
+    nuevoCliente: { tipo_documento: '6', numero_documento: '', razon_social: '', direccion: '' },
+    emitiendo: false,
+
+    async init() {
+      await this.cargarSeries();
+      this.agregarItem();
+      this.onTipoChange();
+    },
+
+    get seriesFiltradas() {
+      const prefijos = { '01': 'F', '03': 'B', '07': null, '08': null };
+      const pref = prefijos[this.form.tipo_documento];
+      // Para NC/ND: la serie debe matchear al tipo del doc referencia (F o B)
+      if (this.form.tipo_documento === '07' || this.form.tipo_documento === '08') {
+        const refPref = this.form.doc_referencia_tipo === '01' ? 'F' : 'B';
+        return this.series.filter(s => s.startsWith(refPref));
+      }
+      return this.series.filter(s => s.startsWith(pref));
+    },
+
+    get totales() {
+      let gravado = 0, exonerado = 0, inafecto = 0, igv = 0, total = 0;
+      this.form.items.forEach(it => {
+        const base = (it.cantidad || 0) * (it.valor_unitario || 0);
+        if (it.tipo_afectacion_igv === '10') { gravado += base; igv += it.igv_monto || 0; }
+        else if (it.tipo_afectacion_igv === '20') exonerado += base;
+        else if (it.tipo_afectacion_igv === '30') inafecto += base;
+        total += it.total_linea || 0;
+      });
+      return { gravado, exonerado, inafecto, igv, total };
+    },
+
+    get sumaCuotas() {
+      return this.form.cuotas.reduce((s, c) => s + (c.monto || 0), 0);
+    },
+
+    get cuotasOk() {
+      if (this.form.forma_pago !== 'Credito') return true;
+      return Math.abs(this.sumaCuotas - this.totales.total) < 0.01;
+    },
+
+    get puedeEmitir() {
+      return this.form.cliente_numero_doc && this.form.serie && this.form.items.length > 0
+             && this.totales.total > 0 && this.cuotasOk;
+    },
+
+    monedaSimbolo() { return { 'PEN': 'S/', 'USD': '$', 'EUR': '€' }[this.form.moneda] || ''; },
+    docLabel(t) { return { '1': 'DNI', '6': 'RUC', '4': 'CE', '7': 'PAS', '0': 'S/D' }[t] || ''; },
+
+    onTipoChange() {
+      if (this.form.tipo_documento === '03') this.form.cliente_tipo_doc = '1';
+      else this.form.cliente_tipo_doc = '6';
+      const sf = this.seriesFiltradas;
+      if (sf.length > 0 && !sf.includes(this.form.serie)) {
+        this.form.serie = sf[0];
+        this.cargarProximoCorrelativo();
+      }
+    },
+
+    onMonedaChange() {
+      if (this.form.moneda === 'PEN') this.form.tipo_cambio = 1.0;
+      else if (this.form.tipo_cambio === 1.0) this.form.tipo_cambio = 3.75;
+    },
+
+    onDetraccionCodigo() {
+      const d = this.catalogoDetraccion.find(d => d.codigo === this.form.detraccion_codigo);
+      if (d) this.form.detraccion_tasa = d.tasa;
+    },
+
+    async cargarSeries() {
+      try {
+        const res = await fetch('/api/correlativos');
+        if (!res.ok) return;
+        const data = await res.json();
+        this.series = (data.items || data).map(s => s.serie).filter((v, i, a) => a.indexOf(v) === i);
+        const sf = this.seriesFiltradas;
+        if (sf.length > 0) {
+          this.form.serie = sf[0];
+          await this.cargarProximoCorrelativo();
+        }
+      } catch (e) { /* silent */ }
+    },
+
+    async cargarProximoCorrelativo() {
+      if (!this.form.serie) return;
+      try {
+        const res = await fetch('/api/comprobantes/proximo-correlativo?serie=' + encodeURIComponent(this.form.serie));
+        if (!res.ok) return;
+        const data = await res.json();
+        this.form.correlativo = data.correlativo || data.proximo || 1;
+      } catch (e) { /* silent */ }
+    },
+
+    async buscarClientes() {
+      if ((this.clienteQuery || '').length < 2) { this.sugerencias = []; return; }
+      try {
+        const res = await fetch('/api/clientes/buscar?q=' + encodeURIComponent(this.clienteQuery));
+        if (!res.ok) return;
+        const data = await res.json();
+        this.sugerencias = data.items || data;
+        this.mostrarSugerencias = true;
+      } catch (e) { /* silent */ }
+    },
+
+    seleccionarCliente(c) {
+      this.form.cliente_id = c.id;
+      this.form.cliente_tipo_doc = c.tipo_documento;
+      this.form.cliente_numero_doc = c.numero_documento;
+      this.form.cliente_razon_social = c.razon_social;
+      this.form.cliente_direccion = c.direccion || '';
+      this.clienteQuery = '';
+      this.mostrarSugerencias = false;
+      this.sugerencias = [];
+    },
+
+    limpiarCliente() {
+      this.form.cliente_id = null;
+      this.form.cliente_numero_doc = '';
+      this.form.cliente_razon_social = '';
+      this.form.cliente_direccion = '';
+    },
+
+    async crearCliente() {
+      if (!this.nuevoCliente.numero_documento || !this.nuevoCliente.razon_social) {
+        window.toast('warning', 'Completa documento y razón social');
+        return;
+      }
+      try {
+        const res = await fetch('/api/clientes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.nuevoCliente),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Error al crear cliente');
+        this.seleccionarCliente(data);
+        this.modalCliente = false;
+        this.nuevoCliente = { tipo_documento: '6', numero_documento: '', razon_social: '', direccion: '' };
+        window.toast('success', 'Cliente creado');
+      } catch (e) {
+        window.toast('error', e.message);
+      }
+    },
+
+    agregarItem() {
+      this.form.items.push({
+        descripcion: '', codigo: '', producto_id: null,
+        unidad_medida: 'NIU', cantidad: 1, valor_unitario: 0,
+        tipo_afectacion_igv: '10', igv_pct: 18, igv_monto: 0,
+        total_linea: 0, _sug: [], _mostrarSug: false,
+      });
+    },
+
+    eliminarItem(idx) { this.form.items.splice(idx, 1); },
+
+    abrirBuscadorProducto(idx) { this.form.items[idx]._mostrarSug = true; },
+
+    async buscarProductos(idx) {
+      const q = this.form.items[idx].descripcion;
+      if ((q || '').length < 2) { this.form.items[idx]._sug = []; return; }
+      try {
+        const res = await fetch('/api/productos/buscar?q=' + encodeURIComponent(q));
+        if (!res.ok) return;
+        const data = await res.json();
+        this.form.items[idx]._sug = data.items || data;
+        this.form.items[idx]._mostrarSug = true;
+      } catch (e) { /* silent */ }
+    },
+
+    seleccionarProducto(idx, p) {
+      const it = this.form.items[idx];
+      it.producto_id = p.id;
+      it.codigo = p.codigo;
+      it.descripcion = p.descripcion;
+      it.unidad_medida = p.unidad_medida;
+      it.valor_unitario = p.valor_unitario;
+      it.tipo_afectacion_igv = p.tipo_afectacion_igv || '10';
+      it._mostrarSug = false;
+      it._sug = [];
+      this.recalcLinea(idx);
+    },
+
+    recalcLinea(idx) {
+      const it = this.form.items[idx];
+      const base = (it.cantidad || 0) * (it.valor_unitario || 0);
+      if (it.tipo_afectacion_igv === '10') {
+        it.igv_monto = +(base * 0.18).toFixed(2);
+        it.total_linea = +(base + it.igv_monto).toFixed(2);
+      } else {
+        it.igv_monto = 0;
+        it.total_linea = +base.toFixed(2);
+      }
+    },
+
+    async emitir() {
+      if (!this.puedeEmitir) {
+        window.toast('warning', 'Completa cliente, items y totales válidos');
+        return;
+      }
+      this.emitiendo = true;
+      try {
+        const payload = JSON.parse(JSON.stringify(this.form));
+        // limpiar campos auxiliares
+        payload.items.forEach(it => { delete it._sug; delete it._mostrarSug; });
+        const res = await fetch('/api/comprobantes/emitir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = data.detail ? (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) : 'Error al emitir';
+          throw new Error(msg);
+        }
+        window.toast('success', 'Comprobante emitido: ' + (data.numero_completo || ''));
+        setTimeout(() => { window.location.href = '/comprobantes/' + data.id; }, 700);
+      } catch (e) {
+        window.toast('error', e.message);
+      } finally {
+        this.emitiendo = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

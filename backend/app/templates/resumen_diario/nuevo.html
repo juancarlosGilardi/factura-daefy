@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Nuevo resumen diario{% endblock %}
+{% block page_title %}Nuevo resumen diario{% endblock %}
+
+{% block content %}
+{% include "components/_toast.html" %}
+
+<div x-data="rdNuevo()" x-init="cargar()" class="max-w-5xl mx-auto space-y-4">
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+    <p class="text-sm text-gray-600 mb-4">
+      Selecciona la fecha de las boletas a comunicar. Por defecto se incluyen todas las boletas emitidas ese día.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Fecha de las boletas (referencia)</label>
+        <input type="date" x-model="form.fecha_referencia" @change="cargar()"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Fecha generación</label>
+        <input type="date" x-model="form.fecha_generacion"
+          class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h4 class="font-display font-semibold text-gray-800">Boletas del día</h4>
+      <div class="text-sm text-gray-600">
+        <span x-text="form.comprobantes_ids.length + ' / ' + boletas.length + ' seleccionadas'"></span>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr class="text-left text-xs uppercase tracking-wider text-gray-600">
+            <th class="px-3 py-2 w-10"><input type="checkbox" :checked="form.comprobantes_ids.length === boletas.length && boletas.length > 0" @change="toggleTodos($event.target.checked)" class="w-4 h-4 text-blaugrana-500"/></th>
+            <th class="px-3 py-2">Número</th>
+            <th class="px-3 py-2">Cliente</th>
+            <th class="px-3 py-2">Estado</th>
+            <th class="px-3 py-2 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if="boletas.length === 0">
+            <tr><td colspan="5" class="px-3 py-12 text-center text-gray-400">No hay boletas en esa fecha</td></tr>
+          </template>
+          <template x-for="b in boletas" :key="b.id">
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+              <td class="px-3 py-2"><input type="checkbox" :value="b.id" x-model="form.comprobantes_ids" class="w-4 h-4 text-blaugrana-500"/></td>
+              <td class="px-3 py-2 font-medium" x-text="b.numero_completo"></td>
+              <td class="px-3 py-2 text-gray-600 truncate max-w-xs" x-text="b.cliente_razon_social"></td>
+              <td class="px-3 py-2 text-gray-600" x-text="b.estado"></td>
+              <td class="px-3 py-2 text-right" x-text="(b.moneda || 'PEN') + ' ' + (b.total_venta || 0).toFixed(2)"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="flex justify-end gap-3">
+    <a href="/resumen-diario" class="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-100">Cancelar</a>
+    <button @click="emitir()" :disabled="emitiendo || form.comprobantes_ids.length === 0"
+      class="px-5 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium disabled:opacity-50">
+      <span x-show="!emitiendo">Emitir resumen</span>
+      <span x-show="emitiendo">Enviando...</span>
+    </button>
+  </div>
+</div>
+
+<script>
+function rdNuevo() {
+  return {
+    form: {
+      fecha_generacion: new Date().toISOString().slice(0,10),
+      fecha_referencia: new Date(Date.now() - 86400000).toISOString().slice(0,10),
+      comprobantes_ids: [],
+    },
+    boletas: [],
+    emitiendo: false,
+
+    async cargar() {
+      try {
+        const params = new URLSearchParams({ tipo: '03', desde: this.form.fecha_referencia, hasta: this.form.fecha_referencia });
+        const res = await fetch('/api/comprobantes?' + params.toString());
+        if (!res.ok) throw new Error('Error');
+        const data = await res.json();
+        this.boletas = data.items || data;
+        this.form.comprobantes_ids = this.boletas.map(b => b.id);
+      } catch (e) { window.toast('error', e.message); }
+    },
+
+    toggleTodos(check) {
+      this.form.comprobantes_ids = check ? this.boletas.map(b => b.id) : [];
+    },
+
+    async emitir() {
+      this.emitiendo = true;
+      try {
+        const res = await fetch('/api/resumen-diario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Error al emitir');
+        window.toast('success', 'Resumen enviado (Ticket: ' + (data.ticket || data.id) + ')');
+        setTimeout(() => { window.location.href = '/resumen-diario'; }, 800);
+      } catch (e) { window.toast('error', e.message); }
+      finally { this.emitiendo = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

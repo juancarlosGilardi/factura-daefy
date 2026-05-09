@@ -1,0 +1,65 @@
+# Configuración con secretos
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Build
+build/
+dist/
+*.egg-info/
+*.spec.bak
+
+# Logs
+*.log
+logs/
+
+# Backups generados por la app (zip de .mdb)
+backups/
+
+# Certificados (excepto los de ejemplo si los hay)
+certs/*.pfx
+certs/*.p12
+!certs/.gitkeep
+
+# Bases de datos del cliente — NUNCA commitear datos del cliente
+data/*.mdb
+data/*.accdb
+data/*.ldb
+data/*.laccdb
+!data/.gitkeep
+
+# Storage de generados
+storage/xml/*
+storage/cdr/*
+storage/pdf/*
+!storage/xml/.gitkeep
+!storage/cdr/.gitkeep
+!storage/pdf/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# pytest, mypy, coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Datos locales temporales
+.local-data/

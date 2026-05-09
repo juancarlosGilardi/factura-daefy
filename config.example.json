@@ -1,0 +1,49 @@
+{
+  "_comentario": "Plantilla pública. Copia este archivo a config.json y rellena los valores reales. config.json está en .gitignore para no commitear secretos.",
+  "_doc": "Variables de entorno (overrides): FACTURA_MDB_PATH, FACTURA_MDB_RUC, FACTURA_MDB_SUNAT_ENV, FACTURA_MDB_SOL_USER, FACTURA_MDB_SOL_PASS, FACTURA_MDB_CERT_PATH, FACTURA_MDB_CERT_PASS",
+
+  "mdb": {
+    "_comentario": "Path al archivo .mdb del cliente. NO se modifica fuera de Factura-mdb (la app comparte el mismo .mdb con SIAP legacy).",
+    "path": "C:/ruta/al/db_bancos.mdb"
+  },
+
+  "empresa": {
+    "_comentario": "Datos fijos de empresa que se usan en plantillas y XML SUNAT. El RUC se sincroniza con el .mdb si difiere.",
+    "ruc": "20XXXXXXXXX",
+    "razon_social": "RAZON SOCIAL S.A.C.",
+    "nombre_comercial": "NOMBRE COMERCIAL",
+    "direccion": "AV. EJEMPLO NRO. 123",
+    "ubigeo": "150101",
+    "departamento": "LIMA",
+    "provincia": "LIMA",
+    "distrito": "LIMA",
+    "telefono": null,
+    "email": null
+  },
+
+  "sunat": {
+    "_comentario": "BETA o produccion. Default: beta. Producción solo después de pruebas exitosas en BETA y aprobación expresa del cliente.",
+    "ambiente": "beta",
+    "_comentario_sol": "MODDATOS/MODDATOS funcionan en BETA. Para producción se cambian estas credenciales por las reales SOL del cliente.",
+    "sol_user": "MODDATOS",
+    "sol_pass": "MODDATOS"
+  },
+
+  "certificado": {
+    "_comentario": "Path relativo a la raíz del proyecto Factura-mdb (recomendado) o absoluto. La password real va aquí — config.json está en .gitignore.",
+    "path": "certs/20XXXXXXXXX.pfx",
+    "password": "REEMPLAZAR_CON_PASSWORD_REAL"
+  },
+
+  "configuracion": {
+    "_comentario": "Configuraciones operativas (IGV, formato impresión, detracción). Opcionales — los defaults son sensatos.",
+    "igv_rate": 18.0,
+    "formato_impresion": "A4",
+    "moneda_default": "PEN",
+    "aplica_detraccion": false,
+    "detraccion_codigo": null,
+    "detraccion_porcentaje": 0.0,
+    "cta_banco_nacion": null,
+    "auto_envio_sunat": false
+  }
+}
