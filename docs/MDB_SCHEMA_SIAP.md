@@ -38,7 +38,7 @@ Las demás 286 tablas SIAP (compras, inventarios, contabilidad, planillas, etc.)
 
 ### Mapeo Factura-mdb ↔ SIAP
 
-| SinSol/SUNAT cat 06 | F2TIPDOC SIAP |
+| Factura-mdb / SUNAT cat 06 | F2TIPDOC SIAP |
 |---|---|
 | `'6'` (RUC) | `'J'` |
 | `'1'` (DNI) | `'N'` |

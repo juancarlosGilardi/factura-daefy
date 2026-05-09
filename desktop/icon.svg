@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" shape-rendering="geometricPrecision">
   <!-- ===========================================================
-       SinSol — icono blaugrana
-       Estilo libre inspirado en las franjas blaugrana del FCB:
-       franjas verticales alternas azul/grana detrás de una "S"
-       blanca en bloque. Acento dorado abajo.
+       Factura-mdb — icono blaugrana (heredado)
+       Estilo libre con franjas verticales alternas azul/grana
+       detrás de una letra blanca en bloque. Acento dorado abajo.
        Paleta:
          azul   #004D98
          grana  #A50044
