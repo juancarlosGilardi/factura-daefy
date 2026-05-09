@@ -144,7 +144,7 @@ def mdb_producto_unico_to_dict(
 def _decidir_estado(row: Any) -> str:
     """Calcula el estado Factura-mdb (P/A/R/B) a partir de las flags MDB.
 
-    Heurística de los scripts SIAPP existentes:
+    Heurística derivada de los scripts de inspección SIAP:
         * F4ESTNUL truthy → 'B' (baja)
         * F4CDR contiene 'aceptado' o F4ESTEMI truthy → 'A'
         * F4CDR contiene 'rechazado' → 'R'
