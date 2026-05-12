@@ -338,6 +338,7 @@ from .api import (  # noqa: E402
     clientes,
     comprobantes,
     comunicacion_baja,
+    email_envio,
     empresas,
     legacy_emision,
     productos,
@@ -357,6 +358,7 @@ app.include_router(clientes.router)
 app.include_router(productos.router)
 app.include_router(comprobantes.router)
 app.include_router(comprobantes.correlativos_router)
+app.include_router(email_envio.router)
 app.include_router(comunicacion_baja.router)
 app.include_router(resumen_diario.router)
 app.include_router(reportes.router)
