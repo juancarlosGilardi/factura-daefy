@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+body{font-family:Arial,sans-serif;font-size:8px;color:#000;margin:0;padding:10px;max-width:280px}
+.center{text-align:center} h2{font-size:10px;margin:0 0 2px} .sep{border-top:1px dashed #999;margin:5px 0}
+table{width:100%;border-collapse:collapse;font-size:7px} td{padding:2px} .ar{text-align:right;font-family:monospace}
+.bf{font-weight:700} .let{font-size:7px;margin:4px 0;padding:4px;background:#f5f5f5}
+</style></head><body>
+<div class="center"><h2>{{ empresa.razon_social }}</h2><div style="font-size:7px">RUC: {{ empresa.ruc }}</div><div style="font-size:7px">{{ empresa.direccion }}</div></div>
+<div class="sep"></div>
+<div class="center" style="font-size:9px;font-weight:700">{{ comprobante.numero_completo }}</div>
+<div class="center" style="font-size:7px">{{ comprobante.fecha_emision }}</div>
+<div class="sep"></div>
+<div style="font-size:7px"><strong>Cliente:</strong> {{ comprobante.cliente_razon_social }}<br><strong>Doc:</strong> {{ comprobante.cliente_numero_doc }}</div>
+<div class="sep"></div>
+<table>{% for d in detalles %}<tr><td>{{ d.cantidad }}x {{ d.descripcion }}</td><td class="ar">{{ "%.2f"|format(d.total) }}</td></tr>{% endfor %}</table>
+<div class="sep"></div>
+<table><tr><td>GRAVADO</td><td class="ar">{{ "%.2f"|format(comprobante.total_gravado) }}</td></tr><tr><td>IGV</td><td class="ar">{{ "%.2f"|format(comprobante.total_igv) }}</td></tr><tr class="bf"><td>TOTAL</td><td class="ar">{{ comprobante.moneda }} {{ "%.2f"|format(comprobante.total_venta) }}</td></tr></table>
+<div class="let"><strong>SON:</strong> {{ comprobante.monto_letras }}</div>
+<div class="sep"></div><div class="center" style="font-size:6px">Representación impresa del CPE<br>Consulte en www.sunat.gob.pe</div>
+</body></html>

@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .core.config import log_dir, settings
-from .core.db_adapter import describe_mode, get_mdb_path
+from .core.db_adapter import describe_mode, get_dbf_path, get_mdb_path, is_dbf_mode
 from .services.mdb_importer.connection import conectar
 
 
@@ -66,7 +66,16 @@ class _EmpresaFromConfig:
         self.telefono = emp.get("telefono")
         self.email = emp.get("email")
         self.sitio_web = emp.get("sitio_web")
-        self.logo_path = emp.get("logo_path")
+        # Resolver logo_path como absoluto (relativo a PROJECT_ROOT en config.json)
+        _logo = emp.get("logo_path")
+        if _logo:
+            from pathlib import Path as _P
+            _p = _P(_logo)
+            if not _p.is_absolute():
+                _p = settings.PROJECT_ROOT / _p
+            self.logo_path = str(_p.resolve()) if _p.exists() else None
+        else:
+            self.logo_path = None
         self.sol_user = settings.SOL_USER
         self.sol_pass = settings.SOL_PASS
         self.sunat_env = settings.SUNAT_ENV
@@ -105,22 +114,36 @@ _FAKE_CONFIG_MDB = _ConfigFromConfig()
 
 
 # ---------------------------------------------------------------------------
-# Lifespan — verifica que el .mdb es accesible al arrancar.
+# Lifespan — verifica que la BD del modo activo es accesible al arrancar.
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logger.info("Factura-mdb v%s arrancando...", settings.APP_VERSION)
+    logger.info("Modo BD: %s", describe_mode())
     logger.info("Modo SUNAT: %s", settings.SUNAT_ENV.upper())
     if settings.SUNAT_ENV == "produccion":
         logger.warning(
             "MODO PRODUCCIÓN ACTIVO. Las emisiones llegarán a SUNAT real."
         )
     try:
-        cn = conectar(get_mdb_path())
-        cn.close()
-        logger.info("MDB accesible: %s", describe_mode())
+        if is_dbf_mode():
+            # Modo DBF (Visual FoxPro / GECOPE): valida que la carpeta exista
+            # y que las tablas claves estén presentes.
+            dbf_dir = get_dbf_path()
+            required = ["cliente.dbf", "ventas.dbf", "ventas_detalle.dbf"]
+            faltan = [t for t in required if not (dbf_dir / t).exists()]
+            if faltan:
+                raise RuntimeError(
+                    f"Faltan tablas DBF en {dbf_dir}: {', '.join(faltan)}"
+                )
+            logger.info("DBF accesible: %s (%d tablas)", dbf_dir, len(required))
+        else:
+            # Modo MDB (Access) — abre y cierra para verificar conexión.
+            cn = conectar(get_mdb_path())
+            cn.close()
+            logger.info("MDB accesible: %s", describe_mode())
     except Exception as exc:  # noqa: BLE001
-        logger.exception("No se pudo abrir el .mdb: %s", exc)
+        logger.exception("No se pudo abrir la BD: %s", exc)
         # No raise: dejamos arrancar para que la UI muestre el error.
     yield
     logger.info("Factura-mdb cerrado")

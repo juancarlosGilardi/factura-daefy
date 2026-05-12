@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+body{font-family:Arial,sans-serif;font-size:9px;color:#1a1a2e;margin:0;padding:18px;max-width:400px}
+h2{font-size:11px;margin:0} .doc{text-align:right;background:#3b82f6;color:#fff;padding:6px 10px;border-radius:5px;font-size:9px}
+.doc .s{font-family:monospace;font-size:12px;font-weight:700} .info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:6px;font-size:8px}
+.box h4{font-size:7px;text-transform:uppercase;color:#64748b;margin:0 0 2px}
+table{width:100%;border-collapse:collapse;font-size:8px;margin:6px 0}
+th{background:#f1f5f9;padding:3px 4px;text-align:left;font-size:7px;text-transform:uppercase;color:#64748b;border-bottom:1px solid #e2e8f0}
+td{padding:3px 4px;border-bottom:1px solid #f1f5f9} .ar{text-align:right;font-family:monospace}
+.tot{display:flex;justify-content:flex-end} .tot table{width:180px} .tot td{border:none;padding:2px 4px}
+.tf td{font-weight:700;border-top:2px solid #3b82f6;padding-top:4px}
+.let{background:#f8fafc;border:1px solid #e2e8f0;padding:5px 8px;border-radius:4px;font-size:8px;margin:6px 0}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;border-bottom:2px solid #3b82f6;padding-bottom:8px;margin-bottom:8px">
+<div><h2>{{ empresa.razon_social }}</h2><div style="font-size:8px;color:#64748b">{{ empresa.direccion }}</div></div>
+<div class="doc"><div style="font-size:7px;text-transform:uppercase">{{ comprobante.tipo_documento }}</div><div class="s">{{ comprobante.numero_completo }}</div><div>{{ comprobante.fecha_emision }}</div><div>RUC: {{ empresa.ruc }}</div></div>
+</div>
+<div class="info"><div class="box"><h4>Cliente</h4><div style="font-weight:600">{{ comprobante.cliente_razon_social }}</div><div>{{ comprobante.cliente_numero_doc }}</div></div>
+<div class="box"><h4>Documento</h4><div>Moneda: {{ comprobante.moneda }}</div></div></div>
+<table><thead><tr><th>#</th><th>Descripción</th><th class="ar">Cant</th><th class="ar">P.U.</th><th class="ar">IGV</th><th class="ar">Total</th></tr></thead>
+<tbody>{% for d in detalles %}<tr><td>{{ d.numero_orden }}</td><td>{{ d.descripcion }}</td><td class="ar">{{ "%.2f"|format(d.cantidad) }}</td><td class="ar">{{ "%.2f"|format(d.precio_unitario) }}</td><td class="ar">{{ "%.2f"|format(d.igv) }}</td><td class="ar" style="font-weight:600">{{ "%.2f"|format(d.total) }}</td></tr>{% endfor %}</tbody></table>
+<div class="tot"><table>{% if comprobante.total_gravado > 0 %}<tr><td>Op. Gravadas</td><td class="ar">{{ "%.2f"|format(comprobante.total_gravado) }}</td></tr>{% endif %}<tr><td>IGV</td><td class="ar">{{ "%.2f"|format(comprobante.total_igv) }}</td></tr><tr class="tf"><td>TOTAL</td><td class="ar">{{ comprobante.moneda }} {{ "%.2f"|format(comprobante.total_venta) }}</td></tr></table></div>
+<div class="let"><strong>SON:</strong> {{ comprobante.monto_letras }}</div>
+</body></html>
