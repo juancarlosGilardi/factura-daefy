@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
-from ..core.db_adapter import is_mdb_mode
+from ..core.db_adapter import is_dbf_mode, is_mdb_mode
 from ..models.producto import Producto
 from ..schemas.producto import (
     ProductoIn, ProductoOut, ProductoUpdate, ProductoListResponse,
@@ -36,6 +36,15 @@ def listar_productos(
 ):
     # Aliases del frontend
     search = search or q_search
+
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ProductoRepoDBF
+        items, total = ProductoRepoDBF.listar(
+            q=search, activo=activo, limit=limit, offset=offset,
+        )
+        return ProductoListResponse(
+            items=items, total=total, limit=limit, offset=offset,
+        )
 
     if is_mdb_mode():
         from ..core.db_adapter.mdb_repo import ProductoRepoMDB

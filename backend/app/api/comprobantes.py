@@ -16,7 +16,7 @@ from ..services.excel_export import (
 )
 
 from ..core.database import get_db
-from ..core.db_adapter import is_mdb_mode
+from ..core.db_adapter import is_dbf_mode, is_mdb_mode
 from ..models.empresa import Configuracion
 from ..models.comprobante import Comprobante, ComprobanteDetalle
 from ..schemas.comprobante import (
@@ -75,6 +75,24 @@ def listar_comprobantes(
     fecha_desde = fecha_desde or desde
     fecha_hasta = fecha_hasta or hasta
     search = search or q_search
+
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
+        items, total = ComprobanteRepoDBF.listar(
+            filtros={
+                "tipo_documento": tipo_documento,
+                "serie": serie,
+                "estado": estado,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta,
+                "cliente_id": cliente_id,
+                "q": (search or "").strip() or None,
+            },
+            limit=limit, offset=offset,
+        )
+        return ComprobanteListResponse(
+            items=items, total=total, limit=limit, offset=offset,
+        )
 
     if is_mdb_mode():
         from ..core.db_adapter.repo import ComprobanteRepoMDB

@@ -191,3 +191,73 @@ def get_configuracion_alias(db: Session = Depends(get_db)):
 def put_configuracion_alias(payload: ConfiguracionUpdate,
                               db: Session = Depends(get_db)):
     return actualizar_configuracion(payload, db)
+
+
+# ---------- DBF Path Configuration ----------
+from pydantic import BaseModel
+
+
+class DBFPathIn(BaseModel):
+    dbf_path: str
+
+
+class DBFPathOut(BaseModel):
+    status: str
+    path: str
+    message: str = ""
+
+
+@config_router.get("/dbf-path", response_model=DBFPathOut)
+def get_dbf_path_endpoint():
+    """Obtiene la ruta actual de los DBFs."""
+    current_path = core_config.settings.DBF_PATH
+    return DBFPathOut(
+        status="ok",
+        path=str(current_path),
+    )
+
+
+@config_router.post("/dbf-path", response_model=DBFPathOut)
+def set_dbf_path_endpoint(payload: DBFPathIn):
+    """Cambia la ruta de los DBFs y la guarda en config.json.
+
+    Valida que:
+    - La carpeta existe
+    - Contiene cliente.dbf, ventas.dbf, ventas_detalle.dbf
+    """
+    requested_path = Path(payload.dbf_path).resolve()
+
+    # Validar que la carpeta existe
+    if not requested_path.is_dir():
+        raise HTTPException(
+            status_code=422,
+            detail=f"La carpeta {payload.dbf_path} no existe o no es accesible.",
+        )
+
+    # Validar que contiene los DBFs requeridos
+    required_dbfs = ["cliente.dbf", "ventas.dbf", "ventas_detalle.dbf"]
+    missing = [f for f in required_dbfs if not (requested_path / f).exists()]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Faltan archivos DBF requeridos: {', '.join(missing)}",
+        )
+
+    # Guardar en config.json
+    try:
+        core_config.save_config_json({"dbf": {"path": str(requested_path)}})
+        # Recargar settings para que refleje el cambio
+        core_config.settings.reload()
+        logger.info(f"Ruta DBF actualizada a: {requested_path}")
+    except Exception as exc:
+        logger.exception(f"Error al guardar config.json: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al guardar configuración: {exc}",
+        ) from exc
+
+    return DBFPathOut(
+        status="ok",
+        path=str(requested_path),
+        message="Ruta de DBFs actualizada correctamente.",
+    )

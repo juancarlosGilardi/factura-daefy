@@ -210,21 +210,30 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/api/health")
 def health():
     """Estado del servicio."""
+    from .core.db_adapter import is_dbf_mode, is_mdb_mode
+
+    bd_ok = False
+    bd_msg = describe_mode()
     try:
-        cn = conectar(get_mdb_path())
-        cn.close()
-        mdb_ok = True
-        mdb_msg = describe_mode()
+        if is_dbf_mode():
+            get_dbf_path()
+            bd_ok = True
+        elif is_mdb_mode():
+            cn = conectar(get_mdb_path())
+            cn.close()
+            bd_ok = True
     except Exception as exc:  # noqa: BLE001
-        mdb_ok = False
-        mdb_msg = str(exc)
+        bd_ok = False
+        bd_msg = str(exc)
+
     return {
-        "status": "ok" if mdb_ok else "degraded",
+        "status": "ok" if bd_ok else "degraded",
         "service": "factura-mdb",
         "version": settings.APP_VERSION,
+        "db_mode": settings.MDB_MODE,
         "sunat_env": settings.SUNAT_ENV,
-        "mdb_ok": mdb_ok,
-        "mdb_status": mdb_msg,
+        "db_ok": bd_ok,
+        "db_status": bd_msg,
         "ruc": settings.RUC or _FAKE_EMPRESA_MDB.ruc,
     }
 

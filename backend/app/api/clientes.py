@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
-from ..core.db_adapter import is_mdb_mode
+from ..core.db_adapter import is_dbf_mode, is_mdb_mode
 from ..models.cliente import Cliente
 from ..schemas.cliente import (
     ClienteIn, ClienteOut, ClienteUpdate, ClienteListResponse,
@@ -27,7 +27,6 @@ router = APIRouter(prefix="/api/clientes", tags=["clientes"])
 
 @router.get("", response_model=ClienteListResponse)
 def listar_clientes(
-    db: Session = Depends(get_db),
     search: Optional[str] = Query(None, description="Búsqueda por doc/razón social"),
     q_search: Optional[str] = Query(None, alias="q", description="Alias de search (frontend)"),
     tipo_doc: Optional[str] = Query(None),
@@ -35,10 +34,22 @@ def listar_clientes(
     activo: Optional[bool] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    db: Optional[Session] = Depends(get_db),
 ):
     # Aliases del frontend
     search = search or q_search
     tipo_doc = tipo_doc or tipo_documento
+
+    # Modo DBF (GECOPE/VFP9): leer directo de cliente.dbf
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ClienteRepoDBF
+        items, total = ClienteRepoDBF.listar(
+            q=search, tipo_documento=tipo_doc, activo=activo,
+            limit=limit, offset=offset,
+        )
+        return ClienteListResponse(
+            items=items, total=total, limit=limit, offset=offset,
+        )
 
     # Modo MDB lab: leer directo del .mdb del cliente
     if is_mdb_mode():
