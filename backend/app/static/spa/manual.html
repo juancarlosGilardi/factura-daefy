@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual de Usuario — FacturaPE</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1d2e; }
+    ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 3px; }
+
+    .sidebar { position: fixed; top: 0; left: 0; width: 280px; height: 100vh; background: #131622; border-right: 1px solid #1e2235; overflow-y: auto; padding: 24px 0; z-index: 50; }
+    .sidebar-logo { padding: 0 24px 20px; border-bottom: 1px solid #1e2235; margin-bottom: 16px; }
+    .sidebar-logo h1 { font-size: 18px; font-weight: 800; background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .sidebar-logo p { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 24px; font-size: 13px; color: #94a3b8; cursor: pointer; transition: all .2s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: #1e2235; color: #e2e8f0; }
+    .nav-item.active { background: #1e2235; color: #3b82f6; border-left-color: #3b82f6; font-weight: 600; }
+    .nav-item .num { font-size: 10px; font-weight: 700; background: #3b82f6; color: #fff; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+    .main { margin-left: 280px; padding: 40px 60px; max-width: 900px; }
+    .section { margin-bottom: 48px; padding-top: 20px; }
+    .section h2 { font-size: 24px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+    .section h2 .icon { font-size: 28px; }
+    .section .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+    h3 { font-size: 16px; font-weight: 600; color: #93c5fd; margin: 20px 0 10px; }
+    p { font-size: 14px; color: #cbd5e1; margin-bottom: 12px; }
+
+    .step { display: flex; gap: 16px; margin: 16px 0; padding: 16px; background: #1a1d2e; border-radius: 12px; border: 1px solid #1e2235; }
+    .step-num { flex-shrink: 0; width: 32px; height: 32px; background: linear-gradient(135deg, #3b82f6, #6366f1); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #fff; }
+    .step-content { flex: 1; }
+    .step-content strong { color: #93c5fd; }
+    .step-content p { margin: 0; font-size: 13px; }
+
+    .tip { padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+    .tip-info { background: #1e3a5f; border: 1px solid #2563eb40; }
+    .tip-warn { background: #422006; border: 1px solid #f59e0b40; }
+    .tip-success { background: #052e16; border: 1px solid #22c55e40; }
+
+    .field-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+    .field-table th { text-align: left; padding: 10px 14px; background: #1a1d2e; color: #93c5fd; font-weight: 600; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #1e2235; }
+    .field-table td { padding: 10px 14px; border-bottom: 1px solid #1e2235; }
+    .field-table tr:hover { background: #1e223520; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-blue { background: #3b82f620; color: #60a5fa; }
+    .badge-green { background: #22c55e20; color: #4ade80; }
+    .badge-amber { background: #f59e0b20; color: #fbbf24; }
+    .badge-violet { background: #8b5cf620; color: #a78bfa; }
+    .badge-rose { background: #f4365420; color: #fb7185; }
+    .badge-cyan { background: #06b6d420; color: #22d3ee; }
+
+    .mockup { background: #0d1017; border: 1px solid #1e2235; border-radius: 12px; overflow: hidden; margin: 16px 0; }
+    .mockup-bar { background: #131622; padding: 8px 16px; display: flex; gap: 6px; align-items: center; border-bottom: 1px solid #1e2235; }
+    .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mockup-body { padding: 20px; font-size: 12px; }
+    .mockup-field { background: #1a1d2e; border: 1px solid #2a2d3e; border-radius: 6px; padding: 8px 12px; margin: 4px 0; color: #94a3b8; font-size: 12px; }
+    .mockup-btn { display: inline-block; padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: default; }
+    .mockup-btn-primary { background: #3b82f6; color: #fff; }
+    .mockup-btn-ghost { background: #1e2235; color: #94a3b8; }
+    .mockup-grid { display: grid; gap: 8px; }
+    .mockup-label { font-size: 10px; color: #64748b; font-weight: 500; margin-bottom: 2px; text-transform: uppercase; }
+
+    code { background: #1e2235; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #22d3ee; font-family: 'JetBrains Mono', monospace; }
+    .footer { margin-top: 60px; padding: 24px 0; border-top: 1px solid #1e2235; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const NAV = [
+      { id: 'clientes', num: 1, icon: '👥', title: 'Crear Clientes' },
+      { id: 'productos', num: 2, icon: '📦', title: 'Productos y Servicios' },
+      { id: 'factura-mixta', num: 3, icon: '📄', title: 'Factura Mixta' },
+      { id: 'boleta-nd', num: 4, icon: '🌐', title: 'Boleta No Domiciliado' },
+      { id: 'envio-sunat', num: 5, icon: '🚀', title: 'Enviar a SUNAT' },
+      { id: 'envio-email', num: 6, icon: '📧', title: 'Enviar por Email' },
+    ];
+
+    function Step({ n, children }) {
+      return <div className="step"><div className="step-num">{n}</div><div className="step-content">{children}</div></div>;
+    }
+    function Tip({ type, icon, children }) {
+      return <div className={`tip tip-${type}`}><span>{icon}</span><div>{children}</div></div>;
+    }
+
+    function App() {
+      const [active, setActive] = useState('clientes');
+      const sectionRefs = useRef({});
+
+      const scrollTo = (id) => {
+        setActive(id);
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+
+      useEffect(() => {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(e => { if (e.isIntersecting) setActive(e.target.id); });
+        }, { rootMargin: '-20% 0px -60% 0px' });
+        NAV.forEach(n => { const el = document.getElementById(n.id); if (el) observer.observe(el); });
+        return () => observer.disconnect();
+      }, []);
+
+      return <>
+        <div className="sidebar">
+          <div className="sidebar-logo">
+            <h1>FacturaPE</h1>
+            <p>Manual de Usuario v3.0</p>
+          </div>
+          {NAV.map(n => (
+            <div key={n.id} className={`nav-item ${active === n.id ? 'active' : ''}`} onClick={() => scrollTo(n.id)}>
+              <span className="num">{n.num}</span>
+              <span>{n.icon} {n.title}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="main">
+          {/* ═══ 1. CLIENTES ═══ */}
+          <div id="clientes" className="section">
+            <h2><span className="icon">👥</span> Crear Clientes</h2>
+            <p className="subtitle">Domiciliados (RUC/DNI) y No Domiciliados (Pasaporte/CE)</p>
+
+            <h3>Acceso</h3>
+            <p>Menu lateral <code>Clientes</code> → Boton <code>+ Nuevo</code></p>
+
+            <h3>Pasos para crear un cliente domiciliado</h3>
+            <Step n={1}><p><strong>Tipo Documento:</strong> Seleccione <span className="badge badge-blue">RUC</span> para empresas o <span className="badge badge-green">DNI</span> para personas naturales.</p></Step>
+            <Step n={2}><p><strong>Numero:</strong> Ingrese el RUC (11 digitos) o DNI (8 digitos).</p></Step>
+            <Step n={3}><p><strong>Consulta SUNAT:</strong> Si eligio RUC, presione el boton <span className="badge badge-blue">🔍 SUNAT</span> para autocompletar datos desde la API de Factiliza.</p></Step>
+            <Step n={4}><p>Se llenaran automaticamente: <strong>Razon Social</strong>, <strong>Direccion</strong>, <strong>Estado</strong> (ACTIVO/BAJA) y <strong>Condicion</strong> (HABIDO/NO HABIDO).</p></Step>
+            <Step n={5}><p>Complete el <strong>Email</strong> del cliente — necesario para enviar comprobantes electronicos.</p></Step>
+            <Step n={6}><p>Active los toggles de <strong>Agente de Retencion</strong> o <strong>Percepcion</strong> si aplica.</p></Step>
+            <Step n={7}><p>Click en <span className="badge badge-blue">💾 Guardar</span>.</p></Step>
+
+            <Tip type="info" icon="💡">El boton SUNAT usa la API de Factiliza que retorna datos actualizados directamente de SUNAT. Si Factiliza no esta disponible, usa apis.net.pe como respaldo.</Tip>
+
+            <h3>Crear un cliente No Domiciliado</h3>
+            <Step n={1}><p><strong>Tipo Documento:</strong> Seleccione <span className="badge badge-amber">Pasaporte</span>, <span className="badge badge-amber">Carnet Extranjeria</span> o <span className="badge badge-amber">Sin Documento</span>.</p></Step>
+            <Step n={2}><p>Aparecera un aviso amarillo: <em>🌐 Cliente No Domiciliado</em>.</p></Step>
+            <Step n={3}><p>Ingrese manualmente: numero de documento, nombre/razon social, direccion en el extranjero y email.</p></Step>
+
+            <Tip type="warn" icon="⚠️">Los clientes no domiciliados se usan para operaciones de exportacion (tipo operacion 0401). El sistema detecta automaticamente cuando selecciona uno al emitir un comprobante.</Tip>
+
+            <h3>Tipos de documento soportados</h3>
+            <table className="field-table">
+              <thead><tr><th>Codigo</th><th>Tipo</th><th>Domicilio</th><th>Uso</th></tr></thead>
+              <tbody>
+                <tr><td><code>6</code></td><td>RUC</td><td><span className="badge badge-green">Domiciliado</span></td><td>Empresas peruanas</td></tr>
+                <tr><td><code>1</code></td><td>DNI</td><td><span className="badge badge-green">Domiciliado</span></td><td>Personas naturales</td></tr>
+                <tr><td><code>4</code></td><td>Carnet Extranjeria</td><td><span className="badge badge-amber">No Domiciliado</span></td><td>Extranjeros residentes</td></tr>
+                <tr><td><code>7</code></td><td>Pasaporte</td><td><span className="badge badge-amber">No Domiciliado</span></td><td>Turistas / extranjeros</td></tr>
+                <tr><td><code>0</code></td><td>Sin documento</td><td><span className="badge badge-amber">No Domiciliado</span></td><td>Ventas menores / anonimo</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* ═══ 2. PRODUCTOS ═══ */}
+          <div id="productos" className="section">
+            <h2><span className="icon">📦</span> Productos y Servicios</h2>
+            <p className="subtitle">Configurar productos con distintos tipos de afectacion tributaria</p>
+
+            <h3>Acceso</h3>
+            <p>Menu lateral <code>Productos</code> → Boton <code>+ Nuevo</code></p>
+
+            <h3>Campos del formulario</h3>
+            <table className="field-table">
+              <thead><tr><th>Campo</th><th>Descripcion</th><th>Ejemplo</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Codigo</strong></td><td>Codigo interno del producto</td><td><code>S001</code></td></tr>
+                <tr><td><strong>Nombre</strong></td><td>Descripcion del producto o servicio</td><td>Consultoria TI mensual</td></tr>
+                <tr><td><strong>Precio</strong></td><td>Valor unitario sin IGV</td><td>5,000.00</td></tr>
+                <tr><td><strong>U.M.</strong></td><td>Unidad de medida SUNAT</td><td><code>ZZ</code> (servicio), <code>NIU</code> (unidad)</td></tr>
+                <tr><td><strong>Afectacion</strong></td><td>Tipo de afectacion al IGV</td><td>Ver tabla abajo</td></tr>
+                <tr><td><strong>ISC</strong></td><td>Toggle + tasa si aplica (combustibles, bebidas)</td><td>1.27 por galon</td></tr>
+                <tr><td><strong>ICBPER</strong></td><td>Toggle para bolsas plasticas (S/ 0.50 c/u)</td><td>—</td></tr>
+              </tbody>
+            </table>
+
+            <h3>Tipos de afectacion al IGV</h3>
+            <table className="field-table">
+              <thead><tr><th>Codigo</th><th>Tipo</th><th>IGV</th><th>Ejemplo</th></tr></thead>
+              <tbody>
+                <tr><td><code>10</code></td><td><span className="badge badge-blue">Gravado</span></td><td>18%</td><td>Laptops, consultoria, alquiler</td></tr>
+                <tr><td><code>20</code></td><td><span className="badge badge-green">Exonerado</span></td><td>0%</td><td>Arroz, leche, libros</td></tr>
+                <tr><td><code>30</code></td><td><span className="badge badge-amber">Inafecto</span></td><td>0%</td><td>Seguros, intereses bancarios</td></tr>
+                <tr><td><code>40</code></td><td><span className="badge badge-cyan">Exportacion</span></td><td>0%</td><td>Servicios al exterior</td></tr>
+                <tr><td><code>11-17</code></td><td><span className="badge badge-violet">Gravado especial</span></td><td>Varia</td><td>Retiro, transferencia gratuita</td></tr>
+              </tbody>
+            </table>
+
+            <Tip type="success" icon="✅">Al agregar un producto a una factura, puede cambiar la afectacion individualmente en cada linea. No es necesario crear productos duplicados.</Tip>
+          </div>
+
+          {/* ═══ 3. FACTURA MIXTA ═══ */}
+          <div id="factura-mixta" className="section">
+            <h2><span className="icon">📄</span> Factura con Items Afectos e Inafectos</h2>
+            <p className="subtitle">Una misma factura puede tener items gravados, exonerados e inafectos</p>
+
+            <h3>Acceso</h3>
+            <p>Menu lateral <code>Nueva Emision</code></p>
+
+            <h3>Pasos</h3>
+            <Step n={1}><p>Seleccione <strong>Tipo:</strong> <span className="badge badge-blue">Factura (01)</span> y el <strong>Cliente</strong>.</p></Step>
+            <Step n={2}><p>Busque y agregue el primer item (ej: "Consultoria TI" — gravado 10).</p></Step>
+            <Step n={3}><p>Agregue un segundo item (ej: "Poliza seguro" — inafecto 30).</p></Step>
+            <Step n={4}><p><strong>En la columna "Afect."</strong> de cada linea, verifique o cambie el tipo de afectacion con el selector desplegable.</p></Step>
+            <Step n={5}><p>El <strong>Panel Resumen</strong> (derecha) mostrara automaticamente los totales separados:</p>
+              <ul style={{margin:'8px 0', paddingLeft: '20px', fontSize: '13px'}}>
+                <li>Op. Gravada: monto base para calculo de IGV</li>
+                <li>Op. Exonerada: monto sin IGV</li>
+                <li>Op. Inafecta: monto fuera del ambito del IGV</li>
+                <li>IGV (18%): calculado solo sobre lo gravado</li>
+                <li>Total: suma de todo</li>
+              </ul>
+            </Step>
+            <Step n={6}><p>Click en <span className="badge badge-blue">Emitir Comprobante</span>.</p></Step>
+
+            <Tip type="info" icon="💡">El motor tributario calcula cada linea independientemente. Puede mezclar libremente items gravados (10), exonerados (20), inafectos (30) y de exportacion (40) en la misma factura.</Tip>
+
+            <h3>Ejemplo de factura mixta</h3>
+            <div className="mockup">
+              <div className="mockup-bar"><div className="mockup-dot" style={{background:'#f43f5e'}}></div><div className="mockup-dot" style={{background:'#eab308'}}></div><div className="mockup-dot" style={{background:'#22c55e'}}></div><span style={{marginLeft:8,fontSize:11,color:'#64748b'}}>Items del comprobante</span></div>
+              <div className="mockup-body" style={{padding:0}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <thead><tr style={{background:'#1a1d2e'}}>
+                    <th style={{padding:'8px 12px',textAlign:'left',color:'#64748b',fontSize:10}}>#</th>
+                    <th style={{padding:'8px 12px',textAlign:'left',color:'#64748b',fontSize:10}}>DESCRIPCION</th>
+                    <th style={{padding:'8px 12px',textAlign:'right',color:'#64748b',fontSize:10}}>P.UNIT</th>
+                    <th style={{padding:'8px 12px',textAlign:'center',color:'#64748b',fontSize:10}}>AFECT.</th>
+                    <th style={{padding:'8px 12px',textAlign:'right',color:'#64748b',fontSize:10}}>IGV</th>
+                    <th style={{padding:'8px 12px',textAlign:'right',color:'#64748b',fontSize:10}}>TOTAL</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr style={{borderBottom:'1px solid #1e2235'}}>
+                      <td style={{padding:'8px 12px',color:'#64748b'}}>1</td>
+                      <td style={{padding:'8px 12px'}}>Consultoria TI mensual</td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace'}}>5,000.00</td>
+                      <td style={{padding:'8px 12px',textAlign:'center'}}><span className="badge badge-blue">Gravado</span></td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace',color:'#fbbf24'}}>900.00</td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace',fontWeight:600}}>5,900.00</td>
+                    </tr>
+                    <tr style={{borderBottom:'1px solid #1e2235',background:'#131622'}}>
+                      <td style={{padding:'8px 12px',color:'#64748b'}}>2</td>
+                      <td style={{padding:'8px 12px'}}>Poliza seguro de vida</td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace'}}>350.00</td>
+                      <td style={{padding:'8px 12px',textAlign:'center'}}><span className="badge badge-amber">Inafecto</span></td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace',color:'#64748b'}}>0.00</td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace',fontWeight:600}}>350.00</td>
+                    </tr>
+                    <tr style={{background:'#1a1d2e'}}>
+                      <td style={{padding:'8px 12px',color:'#64748b'}}>3</td>
+                      <td style={{padding:'8px 12px'}}>Arroz pilado 50kg</td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace'}}>165.00</td>
+                      <td style={{padding:'8px 12px',textAlign:'center'}}><span className="badge badge-green">Exonerado</span></td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace',color:'#64748b'}}>0.00</td>
+                      <td style={{padding:'8px 12px',textAlign:'right',fontFamily:'monospace',fontWeight:600}}>165.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* ═══ 4. BOLETA NO DOMICILIADO ═══ */}
+          <div id="boleta-nd" className="section">
+            <h2><span className="icon">🌐</span> Boleta de Venta — No Domiciliado</h2>
+            <p className="subtitle">Para ventas a turistas o personas sin documento peruano</p>
+
+            <Step n={1}><p>En <code>Nueva Emision</code>, seleccione <strong>Tipo:</strong> <span className="badge badge-green">Boleta (03)</span>.</p></Step>
+            <Step n={2}><p>En el buscador de cliente, seleccione un cliente con tipo documento <span className="badge badge-amber">Pasaporte</span>, <span className="badge badge-amber">CE</span> o <span className="badge badge-amber">Sin Doc</span>.</p></Step>
+            <Step n={3}><p>El sistema detectara automaticamente que es <strong>No Domiciliado</strong> y cambiara el tipo de operacion a <code>0401</code>.</p></Step>
+            <Step n={4}><p>Agregue los items. Si son servicios al exterior, la afectacion cambia automaticamente a <span className="badge badge-cyan">Exportacion (40)</span>.</p></Step>
+            <Step n={5}><p>Emita el comprobante normalmente.</p></Step>
+
+            <Tip type="warn" icon="⚠️"><strong>Regla SUNAT:</strong> Para boletas de no domiciliados, el tipo de operacion debe ser 0401 (No domiciliado). El sistema lo ajusta automaticamente al detectar el tipo de documento del cliente.</Tip>
+
+            <Tip type="info" icon="💡">Si el cliente es un turista que compra productos fisicos en Peru, los items van como <span className="badge badge-blue">Gravado (10)</span> con IGV normal. Solo los servicios prestados al exterior van como Exportacion (40).</Tip>
+          </div>
+
+          {/* ═══ 5. ENVIO A SUNAT ═══ */}
+          <div id="envio-sunat" className="section">
+            <h2><span className="icon">🚀</span> Enviar a SUNAT</h2>
+            <p className="subtitle">Envio automatico y manual de comprobantes al servidor de SUNAT</p>
+
+            <h3>Envio automatico</h3>
+            <p>Al emitir un comprobante, el sistema lo envia <strong>automaticamente</strong> a SUNAT en segundo plano. No necesita hacer nada adicional.</p>
+
+            <h3>Estados del comprobante</h3>
+            <table className="field-table">
+              <thead><tr><th>Estado</th><th>Significado</th><th>Accion</th></tr></thead>
+              <tbody>
+                <tr><td><span className="badge badge-blue">Emitido (E)</span></td><td>Generado, pendiente de envio</td><td>Se envia automaticamente</td></tr>
+                <tr><td><span className="badge badge-green">Aceptado (A)</span></td><td>SUNAT acepto el comprobante</td><td>Listo — puede descargar CDR</td></tr>
+                <tr><td><span className="badge badge-rose">Rechazado (R)</span></td><td>SUNAT rechazo el comprobante</td><td>Revisar error y reenviar</td></tr>
+                <tr><td><span className="badge badge-amber">Pendiente (P)</span></td><td>SUNAT no respondio (timeout)</td><td>Reintentar envio</td></tr>
+              </tbody>
+            </table>
+
+            <h3>Reenviar a SUNAT (manual)</h3>
+            <Step n={1}><p>Vaya a <code>Comprobantes</code> y filtre por estado <span className="badge badge-rose">Rechazados</span> o <span className="badge badge-amber">Pendientes</span>.</p></Step>
+            <Step n={2}><p>En la columna <strong>Acciones</strong>, haga click en el boton <span className="badge badge-amber">⟳ SUNAT</span>.</p></Step>
+            <Step n={3}><p>El sistema reprogramara el envio. Espere unos segundos y recargue para ver el nuevo estado.</p></Step>
+
+            <Tip type="success" icon="✅">Si SUNAT esta caido (error 500, timeout), el sistema guarda los comprobantes como Pendientes. Puede reenviarlos luego con el boton ⟳ SUNAT o usar el robot automatico nocturno.</Tip>
+
+            <h3>Descarga de archivos</h3>
+            <p>Desde la lista de comprobantes, cada documento aceptado tiene 3 botones de descarga:</p>
+            <table className="field-table">
+              <thead><tr><th>Boton</th><th>Archivo</th><th>Contenido</th></tr></thead>
+              <tbody>
+                <tr><td><span className="badge badge-blue">PDF</span></td><td>Representacion impresa</td><td>PDF con QR, datos completos, listo para imprimir</td></tr>
+                <tr><td><span className="badge badge-cyan">XML</span></td><td>XML firmado digitalmente</td><td>Documento electronico firmado con RSA-SHA1</td></tr>
+                <tr><td><span className="badge badge-green">CDR</span></td><td>Constancia de Recepcion</td><td>Respuesta oficial de SUNAT (ZIP)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* ═══ 6. EMAIL ═══ */}
+          <div id="envio-email" className="section">
+            <h2><span className="icon">📧</span> Enviar por Email al Cliente</h2>
+            <p className="subtitle">Envia XML, CDR y PDF directamente al correo del cliente</p>
+
+            <h3>Envio individual</h3>
+            <Step n={1}><p>En <code>Comprobantes</code>, busque el comprobante con estado <span className="badge badge-green">Aceptado</span>.</p></Step>
+            <Step n={2}><p>Click en el boton <span className="badge badge-violet">📧</span> en la columna Acciones.</p></Step>
+            <Step n={3}><p>Se abrira un modal con el email del cliente prellenado. Puede modificarlo si necesita enviar a otro destinatario.</p></Step>
+            <Step n={4}><p>Click en <span className="badge badge-blue">📤 Enviar</span>.</p></Step>
+
+            <h3>Que recibe el cliente</h3>
+            <p>El email incluye un cuerpo HTML profesional con los datos del comprobante y <strong>3 archivos adjuntos</strong>:</p>
+            <table className="field-table">
+              <thead><tr><th>Adjunto</th><th>Formato</th><th>Para que sirve</th></tr></thead>
+              <tbody>
+                <tr><td><span className="badge badge-blue">PDF</span></td><td>.pdf</td><td>Representacion impresa — el cliente la imprime o archiva</td></tr>
+                <tr><td><span className="badge badge-cyan">XML</span></td><td>.xml</td><td>Documento electronico firmado — validez legal ante SUNAT</td></tr>
+                <tr><td><span className="badge badge-green">CDR</span></td><td>.zip</td><td>Constancia de SUNAT — prueba de que fue aceptado</td></tr>
+              </tbody>
+            </table>
+
+            <h3>Control de envios</h3>
+            <p>El sistema registra <strong>cada email enviado</strong> en la tabla <code>envios_email</code> con:</p>
+            <ul style={{paddingLeft: '20px', fontSize: '13px', marginBottom: '12px'}}>
+              <li>Destinatario, fecha y hora</li>
+              <li>Que adjuntos se incluyeron (PDF/XML/CDR)</li>
+              <li>Si fue exitoso o fallo</li>
+              <li>Quien lo envio (usuario)</li>
+            </ul>
+
+            <Tip type="info" icon="💡">Si el cliente no tiene email registrado, el sistema le pedira que ingrese uno manualmente en el modal. <strong>Registre el email en la ficha del cliente</strong> para no tener que ingresarlo cada vez.</Tip>
+
+            <h3>Configuracion SMTP</h3>
+            <p>Para que el envio funcione, configure las credenciales SMTP en el archivo <code>.env</code>:</p>
+            <div className="mockup">
+              <div className="mockup-bar"><div className="mockup-dot" style={{background:'#22c55e'}}></div><span style={{marginLeft:8,fontSize:11,color:'#64748b'}}>.env</span></div>
+              <div className="mockup-body" style={{fontFamily:'monospace',fontSize:12,color:'#22d3ee'}}>
+                SMTP_HOST=smtp.gmail.com<br/>
+                SMTP_PORT=587<br/>
+                SMTP_USER=facturacion@suempresa.com<br/>
+                SMTP_PASS=xxxx-xxxx-xxxx-xxxx
+              </div>
+            </div>
+            <Tip type="warn" icon="⚠️">Para Gmail, use una <strong>App Password</strong> (no la contraseña normal). Vaya a myaccount.google.com → Seguridad → Contrasenas de aplicaciones.</Tip>
+          </div>
+
+          <div className="footer">
+            <p>FacturaPE v3.0 — Sistema de Facturacion Electronica para Peru</p>
+            <p style={{marginTop: 4}}>Generado automaticamente · {new Date().toLocaleDateString('es-PE')}</p>
+          </div>
+        </div>
+      </>;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
