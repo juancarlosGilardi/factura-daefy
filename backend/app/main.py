@@ -339,6 +339,7 @@ from .api import (  # noqa: E402
     comprobantes,
     comunicacion_baja,
     empresas,
+    importar,
     legacy_emision,
     productos,
     reportes,
@@ -355,6 +356,10 @@ app.include_router(empresas.plural_router)
 app.include_router(empresas.config_router)
 app.include_router(clientes.router)
 app.include_router(productos.router)
+# Importador de productos NUEVOS desde DBF de empresa matriz (IDIVSA → Daefy).
+# Comparte prefijo /api/productos con productos.router pero solo agrega
+# rutas POST estaticas (no choca con /{producto_id}).
+app.include_router(importar.router)
 app.include_router(comprobantes.router)
 app.include_router(comprobantes.correlativos_router)
 app.include_router(comunicacion_baja.router)
