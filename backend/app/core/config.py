@@ -31,7 +31,10 @@ class Settings:
         self._config: dict[str, Any] = {}
         if CONFIG_PATH.exists():
             try:
-                self._config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+                # 'utf-8-sig' tolera config.json guardado por Notepad de Windows
+                # con BOM (EF BB BF) — el 'utf-8' estricto revienta con
+                # "Unexpected UTF-8 BOM" y deja al server sin arrancar.
+                self._config = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
             except Exception as exc:  # noqa: BLE001
                 raise RuntimeError(
                     f"config.json inválido en {CONFIG_PATH}: {exc}"
@@ -198,9 +201,11 @@ def save_config_json(config_dict: dict) -> None:
     Mantiene la estructura existente y sobrescribe solo los campos proporcionados.
     """
     try:
-        # Cargar config existente o empezar con vacío
+        # Cargar config existente o empezar con vacío.
+        # 'utf-8-sig' por consistencia con __init__: si el cliente editó el
+        # archivo en Notepad puede haberle metido BOM.
         if CONFIG_PATH.exists():
-            current = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            current = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
         else:
             current = {}
 
