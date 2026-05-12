@@ -752,6 +752,57 @@ def descargar_cdr_alias(comp_id: int, db: Session = Depends(get_db)):
 def descargar_pdf_alias(comp_id: int, inline: int = 0,
                          db: Session = Depends(get_db)):
     """Alias de /descargar/pdf con soporte ?inline=1 para iframe."""
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
+        from ..core.config import storage_dir, settings
+        from ..services._dict_adapter import DictNS
+
+        comp_dict = ComprobanteRepoDBF.obtener(comp_id)
+        if comp_dict is None:
+            raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+
+        # Empresa desde config.json (no hay tabla empresa en DBF Daefy)
+        empresa = {
+            "ruc": settings.RUC or settings.EMPRESA.get("ruc", ""),
+            "razon_social": settings.EMPRESA.get("razon_social", ""),
+            "nombre_comercial": settings.EMPRESA.get("nombre_comercial", ""),
+            "direccion": settings.EMPRESA.get("direccion", ""),
+            "ubigeo": settings.EMPRESA.get("ubigeo", ""),
+            "departamento": settings.EMPRESA.get("departamento", ""),
+            "provincia": settings.EMPRESA.get("provincia", ""),
+            "distrito": settings.EMPRESA.get("distrito", ""),
+            "telefono": settings.EMPRESA.get("telefono"),
+            "email": settings.EMPRESA.get("email"),
+            "logo_path": settings.EMPRESA.get("logo_path"),
+        }
+
+        # Convención SUNAT: {RUC}-{TIPO}-{SERIE}-{CORRELATIVO_PADDED}.pdf
+        num_parts = (comp_dict.get("numero_completo") or "").split("-")
+        correl = num_parts[1] if len(num_parts) == 2 else f"{int(comp_dict.get('correlativo') or 0):08d}"
+        filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
+        pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
+
+        if not pdf_path.exists():
+            try:
+                from ..services.pdf_generator import generar_pdf_comprobante
+                comp_ns = DictNS(comp_dict)
+                emp_ns = DictNS(empresa)
+                det_list = [DictNS(d) for d in (comp_dict.get("detalles") or [])]
+                pdf_bytes = generar_pdf_comprobante(comp_ns, det_list, emp_ns, None)
+                pdf_path.parent.mkdir(parents=True, exist_ok=True)
+                pdf_path.write_bytes(pdf_bytes)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Error generando PDF modo DBF")
+                raise HTTPException(status_code=500, detail=f"No se pudo generar PDF: {e}")
+
+        headers = {}
+        if inline:
+            headers["Content-Disposition"] = f'inline; filename="{comp_dict.get("numero_completo")}.pdf"'
+        return FileResponse(path=str(pdf_path),
+                             filename=f"{comp_dict.get('numero_completo')}.pdf",
+                             media_type="application/pdf",
+                             headers=headers)
+
     if is_mdb_mode():
         from ..core.db_adapter.repo import ComprobanteRepoMDB, EmpresaRepoMDB
         from ..core.config import storage_dir
