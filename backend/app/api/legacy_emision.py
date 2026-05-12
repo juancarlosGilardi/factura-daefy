@@ -45,19 +45,41 @@ def _r(v: float, n: int = 2) -> float:
 
 
 def _calcular_linea_simple(item: dict, igv_rate: float = 18.0) -> dict:
-    """Calcula montos de una linea a partir del payload del frontend antiguo."""
-    cantidad = float(item.get("cantidad") or 0)
-    precio_unit = float(
-        item.get("precio_unitario") or item.get("precioUnitario") or 0
-    )
-    afect = str(item.get("tipo_afectacion") or item.get("tipoAfectacion") or "10")
+    """Calcula montos de una linea a partir del payload del frontend antiguo.
 
-    # En el frontend antiguo, precio_unitario viene CON IGV (precio final).
-    # Derivamos valor_unitario y valor_venta sin IGV.
-    if afect in GRAVADAS and precio_unit > 0:
-        valor_unit = precio_unit / (1 + igv_rate / 100.0)
+    Acepta dos shapes:
+      - Frontend React antiguo: ``precio_unitario`` viene CON IGV (precio final).
+      - OpenAPI / shape SUNAT: ``valor_unitario`` viene SIN IGV (valor de venta).
+
+    Si llega ``valor_unitario`` lo trata como sin-IGV y deriva ``precio_unit``;
+    si llega ``precio_unitario`` lo trata como con-IGV (comportamiento legacy).
+    """
+    cantidad = float(item.get("cantidad") or 0)
+    afect = str(
+        item.get("tipo_afectacion")
+        or item.get("tipoAfectacion")
+        or item.get("tipo_afectacion_igv")
+        or "10"
+    )
+
+    # Detectar si vino valor_unitario (sin IGV) o precio_unitario (con IGV).
+    raw_valor = item.get("valor_unitario") or item.get("valorUnitario")
+    raw_precio = item.get("precio_unitario") or item.get("precioUnitario")
+
+    if raw_valor is not None and float(raw_valor or 0) > 0:
+        # Shape SUNAT/OpenAPI: el precio sin IGV viene explicito.
+        valor_unit = float(raw_valor)
+        if afect in GRAVADAS:
+            precio_unit = valor_unit * (1 + igv_rate / 100.0)
+        else:
+            precio_unit = valor_unit
     else:
-        valor_unit = precio_unit
+        # Shape legacy: precio_unitario incluye IGV.
+        precio_unit = float(raw_precio or 0)
+        if afect in GRAVADAS and precio_unit > 0:
+            valor_unit = precio_unit / (1 + igv_rate / 100.0)
+        else:
+            valor_unit = precio_unit
 
     bruto = cantidad * valor_unit
     desc_pct = float(
@@ -210,15 +232,40 @@ def emitir_legacy(payload: dict) -> dict:
     from ..core.db_adapter.dbf_writer import ComprobanteWriterDBF
 
     tipo_doc = str(payload.get("tipo_documento") or "01")
-    detalles = payload.get("detalles") or []
+    # Aceptar tanto 'detalles' (shape pydantic interno) como 'items'
+    # (shape OpenAPI / frontend nuevo). Lo que llegue primero gana.
+    detalles = payload.get("detalles") or payload.get("items") or []
     if not detalles:
-        raise HTTPException(status_code=422,
-                             detail="Debe enviar al menos un item en 'detalles'")
+        raise HTTPException(
+            status_code=422,
+            detail="Debe enviar al menos un item en 'items' o 'detalles'",
+        )
 
-    # Resolver cliente para snapshot en cabecera
-    cliente_id = payload.get("cliente_id")
-    cliente_doc = payload.get("cliente_numero_doc")
+    # Resolver cliente para snapshot en cabecera. Acepta el sub-objeto
+    # 'cliente' del shape OpenAPI o los campos planos legacy.
+    cliente_obj = payload.get("cliente") or {}
+    cliente_id = payload.get("cliente_id") or cliente_obj.get("id")
+    cliente_doc = (
+        payload.get("cliente_numero_doc")
+        or cliente_obj.get("numero_doc")
+        or cliente_obj.get("numero_documento")
+    )
     cli = _resolver_cliente_dbf(cliente_id, cliente_doc)
+    # Si vino el sub-objeto 'cliente' completo, usarlo como fallback de los
+    # snapshots que el writer espera planos.
+    if cliente_obj:
+        if not cli.get("razon_social") and cliente_obj.get("razon_social"):
+            cli = dict(cli) if cli else {}
+            cli["razon_social"] = cliente_obj.get("razon_social")
+        if not cli.get("direccion") and cliente_obj.get("direccion"):
+            cli = dict(cli) if cli else {}
+            cli["direccion"] = cliente_obj.get("direccion")
+        if not cli.get("tipo_documento") and cliente_obj.get("tipo_doc"):
+            cli = dict(cli) if cli else {}
+            cli["tipo_documento"] = cliente_obj.get("tipo_doc")
+        if not cli.get("numero_documento") and cliente_doc:
+            cli = dict(cli) if cli else {}
+            cli["numero_documento"] = cliente_doc
 
     # Resolver serie
     serie = payload.get("serie") or _resolver_serie_default(tipo_doc)
