@@ -102,19 +102,18 @@ Write-Host "  config.json, cert.pfx, logo descargados."
 Write-Host ""
 
 # -------------------------------------------------------------------------
-# 4. Descargar DBFs de Daefy
+# 4. Descargar DBFs de Daefy (con .cdx y .fpt regenerados)
 # -------------------------------------------------------------------------
-Write-Host "[4/8] Descargando DBFs de Daefy (~95 MB)..."
-ssh -i "$SSH_KEY" "${VPS_USER}@${VPS_HOST}" "cd /tmp/migracion_hermanas/daefy && tar -czf /tmp/daefy_data.tar.gz DATA/"
-scp -i "$SSH_KEY" "${VPS_USER}@${VPS_HOST}:/tmp/daefy_data.tar.gz" "data\daefy_data.tar.gz"
+Write-Host "[4/8] Descargando DBFs de Daefy (5.6 MB comprimido, ~94 MB expandido)..."
+# Versión completa con .cdx regenerados está en /opt/handoff-secrets/daefy_completo.tar.gz
+scp -i "$SSH_KEY" "${VPS_USER}@${VPS_HOST}:/opt/handoff-secrets/daefy_completo.tar.gz" "data\daefy_completo.tar.gz"
 
 Push-Location "data"
-tar -xzf "daefy_data.tar.gz"
 if (Test-Path "daefy") { Remove-Item -Recurse -Force "daefy" }
-Move-Item "DATA" "daefy"
-Remove-Item "daefy_data.tar.gz"
+tar -xzf "daefy_completo.tar.gz"
+Remove-Item "daefy_completo.tar.gz"
 Pop-Location
-Write-Host "  DBFs en data\daefy\"
+Write-Host "  DBFs en data\daefy\  (con .cdx ya regenerados, no hace falta correr regenerar_fpt)"
 Write-Host ""
 
 # -------------------------------------------------------------------------
