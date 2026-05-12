@@ -1,12 +1,17 @@
-"""Endpoints de reportes para el dashboard."""
+"""Endpoints de reportes para el dashboard.
+
+Incluye reportes de ventas mes/dia, top clientes/productos, dashboard
+y exports a Excel (incluye reporte de ventas del día imprimible A4).
+"""
 import logging
-from datetime import date as _date, timedelta
+from datetime import date as _date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy import func, and_, case
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..core.database import get_db
 from ..core.db_adapter import is_dbf_mode
 from ..models.comprobante import Comprobante
@@ -15,6 +20,7 @@ from ..models.producto import Producto
 from ..services.excel_export import (
     dict_list_to_xlsx_bytes, xlsx_response_headers, XLSX_MEDIA_TYPE,
 )
+from ..services.excel_reportes import build_ventas_dia_xlsx
 
 logger = logging.getLogger("factura_mdb.api.reportes")
 
@@ -570,3 +576,264 @@ def export_pendientes_sunat(db: Session = Depends(get_db)):
     fname = f"reporte_pendientes_sunat_{_date.today().isoformat()}.xlsx"
     return _xlsx_response(rows, headers, sheet_name="Pendientes SUNAT",
                           filename=fname)
+
+
+# =====================================================================
+# Reporte de ventas del día — JSON + XLSX A4
+# =====================================================================
+
+_TIPO_LABEL = {
+    "01": "Factura",
+    "03": "Boleta",
+    "07": "N. Crédito",
+    "08": "N. Débito",
+}
+
+_ESTADO_LABEL = {
+    "A": "Aceptado",
+    "P": "Pendiente",
+    "R": "Rechazado",
+    "B": "Anulado",
+    "": "Pendiente",
+}
+
+
+def _fmt_hora(v: Any) -> str:
+    """Devuelve HH:MM si v es datetime; cadena vacía en caso contrario."""
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%H:%M")
+    return ""
+
+
+def _ventas_dia_dbf(fecha: _date) -> tuple[list[dict], dict]:
+    """Lee ventas.dbf y devuelve (items_ordenados, resumen) para la fecha dada.
+
+    - Filtra tipo 01/03 (factura/boleta) por defecto, pero también permite
+      07/08 si están presentes (NC/ND).
+    - Ordena por (serie ASC, correlativo DESC) — todos del mismo día.
+    - Excluye anulados (REGISTRO_A/DATA_BAJA) del resumen, pero los marca
+      como tales en la tabla.
+    """
+    from ..core.db_adapter.dbf_repo import _dbf  # type: ignore
+    from ..services.dbf_importer import mappers as dbf_mappers
+
+    items: list[dict] = []
+    cant_facturas = 0
+    cant_boletas = 0
+    total_facturas = 0.0
+    total_boletas = 0.0
+    total_igv = 0.0
+
+    fecha_iso = fecha.isoformat()
+
+    for row in _dbf("ventas.dbf"):
+        d = dbf_mappers.dbf_comprobante_to_dict(row)
+        if not d:
+            continue
+        fe = d.get("fecha_emision")
+        fe_iso = fe.isoformat() if hasattr(fe, "isoformat") else str(fe)[:10]
+        if fe_iso != fecha_iso:
+            continue
+
+        tipo = d.get("tipo_documento") or ""
+        if tipo not in ("01", "03", "07", "08"):
+            continue
+
+        estado_raw = d.get("estado") or ""
+        anulado = estado_raw == "B"
+
+        # Hora de emisión: GECOPE no la guarda, pero USER_FECHA suele ser
+        # un datetime cercano al momento real de creación.
+        hora = _fmt_hora(row.get("USER_FECHA"))
+
+        moneda = d.get("moneda") or "PEN"
+        subtotal = float(d.get("subtotal") or 0.0)
+        igv = float(d.get("total_igv") or 0.0)
+        total = float(d.get("total_venta") or 0.0)
+        total_pen = float(d.get("total_pen") or total)
+
+        items.append({
+            "tipo_doc": _TIPO_LABEL.get(tipo, tipo),
+            "tipo_doc_codigo": tipo,
+            "serie_numero": d.get("numero_completo") or "",
+            "serie": d.get("serie") or "",
+            "correlativo": int(d.get("correlativo") or 0),
+            "hora": hora,
+            "cliente": d.get("cliente_razon_social") or "",
+            "ruc_dni": d.get("cliente_numero_doc") or "",
+            "moneda": moneda,
+            "subtotal": round(subtotal, 2),
+            "igv": round(igv, 2),
+            "total": round(total, 2),
+            "total_pen": round(total_pen, 2),
+            "estado": _ESTADO_LABEL.get(estado_raw, estado_raw or "Pendiente"),
+            "anulado": anulado,
+        })
+
+        if anulado:
+            continue
+
+        if tipo == "01":
+            cant_facturas += 1
+            total_facturas += total_pen
+        elif tipo == "03":
+            cant_boletas += 1
+            total_boletas += total_pen
+        # NC/ND no entran al resumen "ventas".
+
+        total_igv += igv  # IGV en moneda original (PEN si moneda PEN).
+
+    # Orden: serie ASC, correlativo DESC.
+    items.sort(key=lambda it: (it["serie"], -it["correlativo"]))
+
+    resumen = {
+        "cantidad_facturas": cant_facturas,
+        "cantidad_boletas": cant_boletas,
+        "total_facturas_pen": round(total_facturas, 2),
+        "total_boletas_pen": round(total_boletas, 2),
+        "total_general_pen": round(total_facturas + total_boletas, 2),
+        "total_igv_pen": round(total_igv, 2),
+    }
+    return items, resumen
+
+
+def _ventas_dia_sql(fecha: _date, db: Session) -> tuple[list[dict], dict]:
+    """Lee comprobantes desde SQL y devuelve (items, resumen) para la fecha."""
+    rows = (
+        db.query(Comprobante)
+        .filter(Comprobante.fecha_emision == fecha)
+        .filter(Comprobante.tipo_documento.in_(["01", "03", "07", "08"]))
+        .order_by(Comprobante.serie.asc(), Comprobante.correlativo.desc())
+        .all()
+    )
+
+    items: list[dict] = []
+    cant_facturas = 0
+    cant_boletas = 0
+    total_facturas = 0.0
+    total_boletas = 0.0
+    total_igv = 0.0
+
+    for c in rows:
+        anulado = (c.estado == "B")
+        tipo = c.tipo_documento or ""
+        total_pen = float(c.total_pen or c.total_venta or 0.0)
+        total_v = float(c.total_venta or 0.0)
+        igv = float(c.total_igv or 0.0)
+        subtotal = float(getattr(c, "subtotal", None) or getattr(c, "total_gravado", None) or 0.0)
+
+        hora = _fmt_hora(getattr(c, "hora_emision", None)) or _fmt_hora(getattr(c, "created_at", None))
+
+        items.append({
+            "tipo_doc": _TIPO_LABEL.get(tipo, tipo),
+            "tipo_doc_codigo": tipo,
+            "serie_numero": c.numero_completo,
+            "serie": c.serie,
+            "correlativo": int(c.correlativo or 0),
+            "hora": hora,
+            "cliente": c.cliente_razon_social or "",
+            "ruc_dni": c.cliente_numero_doc or "",
+            "moneda": c.moneda or "PEN",
+            "subtotal": round(subtotal, 2),
+            "igv": round(igv, 2),
+            "total": round(total_v, 2),
+            "total_pen": round(total_pen, 2),
+            "estado": _ESTADO_LABEL.get(c.estado, c.estado or "Pendiente"),
+            "anulado": anulado,
+        })
+
+        if anulado:
+            continue
+        if tipo == "01":
+            cant_facturas += 1
+            total_facturas += total_pen
+        elif tipo == "03":
+            cant_boletas += 1
+            total_boletas += total_pen
+        total_igv += igv
+
+    resumen = {
+        "cantidad_facturas": cant_facturas,
+        "cantidad_boletas": cant_boletas,
+        "total_facturas_pen": round(total_facturas, 2),
+        "total_boletas_pen": round(total_boletas, 2),
+        "total_general_pen": round(total_facturas + total_boletas, 2),
+        "total_igv_pen": round(total_igv, 2),
+    }
+    return items, resumen
+
+
+@router.get("/ventas-dia")
+def ventas_dia(
+    fecha: Optional[_date] = Query(None, description="Fecha del reporte (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """Reporte de ventas del día (JSON).
+
+    Si `fecha` no se envía, usa la fecha actual del servidor.
+    Devuelve `{fecha, resumen, items}` con todos los comprobantes 01/03/07/08
+    emitidos ese día, ordenados por serie ASC y correlativo DESC.
+    """
+    f = fecha or _date.today()
+
+    if is_dbf_mode():
+        items, resumen = _ventas_dia_dbf(f)
+    else:
+        items, resumen = _ventas_dia_sql(f, db)
+
+    return {
+        "fecha": f.isoformat(),
+        "resumen": resumen,
+        "items": items,
+    }
+
+
+@router.get("/ventas-dia.xlsx")
+def export_ventas_dia(
+    fecha: Optional[_date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Reporte de ventas del día en .xlsx formateado para impresión A4.
+
+    Hoja vertical, márgenes 1cm, headers de tabla repetidos en cada
+    página, y bloque de resumen al final.
+    """
+    f = fecha or _date.today()
+
+    if is_dbf_mode():
+        items, resumen = _ventas_dia_dbf(f)
+    else:
+        items, resumen = _ventas_dia_sql(f, db)
+
+    empresa = settings.EMPRESA or {}
+    empresa_nombre = empresa.get("razon_social") or empresa.get("nombre_comercial") or "EMPRESA"
+    empresa_ruc = empresa.get("ruc") or settings.RUC or ""
+
+    # Logo: resolver path absoluto si está configurado
+    logo_path: Optional[str] = None
+    raw_logo = empresa.get("logo_path")
+    if raw_logo:
+        from pathlib import Path as _P
+        p = _P(raw_logo)
+        if not p.is_absolute():
+            p = _P(getattr(settings, "PROJECT_ROOT", ".")) / raw_logo
+        if p.exists():
+            logo_path = str(p)
+
+    data = build_ventas_dia_xlsx(
+        fecha=f,
+        items=items,
+        resumen=resumen,
+        empresa_nombre=empresa_nombre,
+        empresa_ruc=empresa_ruc,
+        logo_path=logo_path,
+    )
+
+    fname = f"reporte_ventas_dia_{f.isoformat()}.xlsx"
+    return Response(
+        content=data,
+        media_type=XLSX_MEDIA_TYPE,
+        headers=xlsx_response_headers(fname),
+    )
