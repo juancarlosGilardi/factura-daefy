@@ -20,8 +20,11 @@ mappers (`backend/app/services/dbf_importer/mappers.py`) tienen helper
 from __future__ import annotations
 
 import logging
+import threading
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 # Nota: ya no usamos dbfread directamente — el helper _dbf() abajo usa la
 # libreria `dbf` (Ethan Furman) que es mas permisiva con FPTs corruptos.
@@ -33,6 +36,84 @@ from .mdb_repo import _synth_id
 logger = logging.getLogger("factura_mdb.dbf.repo")
 
 DBF_ENC = "cp1252"
+
+
+# ---------------------------------------------------------------------------
+# Caché en memoria con TTL
+# ---------------------------------------------------------------------------
+# Motivo: con 30k clientes en cliente.dbf un full-scan + mapper toma 20-25s.
+# El uso real es single-user / pocos usuarios concurrentes, así que mantener
+# la lista mapeada en RAM (~5-10MB) durante 30-60s elimina el cuello de
+# botella sin comprometer la frescura de los datos. La caché se invalida al
+# escribir vía `invalidate_cache()`.
+
+_CACHE: dict[str, dict[str, Any]] = {}
+_CACHE_LOCK = threading.Lock()
+
+# TTLs por defecto (segundos). Volátil = comprobantes; estable = clientes/productos.
+CACHE_TTL_CLIENTES = 60
+CACHE_TTL_PRODUCTOS = 60
+CACHE_TTL_COMPROBANTES = 30
+
+
+def _cache_get(key: str) -> Optional[Any]:
+    """Devuelve el valor cacheado o None si expiró/no existe."""
+    with _CACHE_LOCK:
+        entry = _CACHE.get(key)
+        if not entry:
+            return None
+        if entry["expires_at"] < datetime.utcnow():
+            # Expiró: lo limpiamos para no inflar el dict
+            _CACHE.pop(key, None)
+            return None
+        return entry["data"]
+
+
+def _cache_set(key: str, data: Any, ttl_seconds: int) -> None:
+    """Guarda data en caché con TTL en segundos."""
+    with _CACHE_LOCK:
+        _CACHE[key] = {
+            "data": data,
+            "expires_at": datetime.utcnow() + timedelta(seconds=ttl_seconds),
+        }
+
+
+def invalidate_cache(key: Optional[str] = None) -> None:
+    """Invalida la caché. Si no se pasa key, invalida todo.
+
+    Llamar después de escrituras (POST/PUT/DELETE) para forzar relectura.
+    Keys conocidas: 'clientes', 'productos', 'comprobantes_cab',
+    'comprobantes_anulados', 'comprobantes_fechas'.
+    """
+    with _CACHE_LOCK:
+        if key is None:
+            _CACHE.clear()
+            logger.info("Caché DBF invalidada por completo")
+        else:
+            _CACHE.pop(key, None)
+            logger.info("Caché DBF invalidada: %s", key)
+
+
+def _cached(key: str, ttl_seconds: int, loader: Callable[[], Any]) -> Any:
+    """Devuelve data cacheada o la carga vía loader() y la cachea.
+
+    Loggea hit/miss con tiempos para detectar regresiones de performance.
+    """
+    cached = _cache_get(key)
+    if cached is not None:
+        logger.debug("Cache HIT [%s]", key)
+        return cached
+
+    t0 = time.perf_counter()
+    data = loader()
+    elapsed = time.perf_counter() - t0
+    _cache_set(key, data, ttl_seconds)
+    n = len(data) if hasattr(data, "__len__") else "?"
+    logger.info(
+        "Cache MISS [%s] cargado en %.2fs (%s items, ttl=%ds)",
+        key, elapsed, n, ttl_seconds,
+    )
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -117,19 +198,29 @@ class ClienteRepoDBF:
     """Lectura de clientes desde cliente.dbf."""
 
     @staticmethod
-    def _iter_all() -> list[dict]:
-        """Carga TODOS los clientes (mapeados) en memoria.
-
-        Con 30k registros y ~68 columnas, esto pesa ~5-10MB. Aceptable
-        para uso single-user (no caching adicional). Si crece, evaluar
-        cache TTL.
-        """
+    def _load_all() -> list[dict]:
+        """Lectura física del DBF (sin caché). No usar directamente."""
         out: list[dict] = []
         for row in _dbf("cliente.dbf"):
             d = dbf_mappers.dbf_cliente_to_dict(row)
             if d:
                 out.append(d)
         return out
+
+    @staticmethod
+    def _iter_all() -> list[dict]:
+        """Devuelve TODOS los clientes (mapeados), usando caché TTL.
+
+        Con 30k registros y ~68 columnas, el dataset pesa ~5-10MB. La
+        caché en RAM evita recorrer el DBF en cada request (25s -> <1s
+        en hit). Se invalida desde `invalidate_cache('clientes')` al
+        escribir.
+        """
+        return _cached(
+            "clientes",
+            CACHE_TTL_CLIENTES,
+            ClienteRepoDBF._load_all,
+        )
 
     @staticmethod
     def listar(
@@ -139,7 +230,8 @@ class ClienteRepoDBF:
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict], int]:
-        items = ClienteRepoDBF._iter_all()
+        # Copia superficial para no ordenar/filtrar sobre la lista cacheada
+        items = list(ClienteRepoDBF._iter_all())
 
         if q:
             qs = q.strip()
@@ -159,22 +251,22 @@ class ClienteRepoDBF:
 
     @staticmethod
     def obtener(cliente_id: int) -> Optional[dict]:
-        """Devuelve un cliente por su id sintético."""
-        for row in _dbf("cliente.dbf"):
-            d = dbf_mappers.dbf_cliente_to_dict(row)
-            if d and d["id"] == int(cliente_id):
+        """Devuelve un cliente por su id sintético (usa caché)."""
+        cid = int(cliente_id)
+        for d in ClienteRepoDBF._iter_all():
+            if d["id"] == cid:
                 return d
         return None
 
     @staticmethod
     def obtener_por_codigo(codigo: str) -> Optional[dict]:
-        """Búsqueda exacta por CODIGO (documento) — más rápida que `obtener`."""
+        """Búsqueda exacta por numero_documento (CODIGO) — usa caché."""
         cod_target = (codigo or "").strip()
         if not cod_target:
             return None
-        for row in _dbf("cliente.dbf"):
-            if (row.get("CODIGO") or "").strip() == cod_target:
-                return dbf_mappers.dbf_cliente_to_dict(row)
+        for d in ClienteRepoDBF._iter_all():
+            if (d.get("numero_documento") or "").strip() == cod_target:
+                return d
         return None
 
     @staticmethod
@@ -196,13 +288,23 @@ class ProductoRepoDBF:
     """
 
     @staticmethod
-    def _cargar_todos() -> dict[str, dict]:
+    def _load_all() -> dict[str, dict]:
+        """Lectura física del DBF (sin caché). No usar directamente."""
         productos: dict[str, dict] = {}
         for row in _dbf("articulo.dbf"):
             d = dbf_mappers.dbf_producto_to_dict(row)
             if d:
                 productos[d["codigo"]] = d
         return productos
+
+    @staticmethod
+    def _cargar_todos() -> dict[str, dict]:
+        """Devuelve dict {codigo: producto} usando caché TTL."""
+        return _cached(
+            "productos",
+            CACHE_TTL_PRODUCTOS,
+            ProductoRepoDBF._load_all,
+        )
 
     @staticmethod
     def listar(
@@ -252,8 +354,8 @@ class ComprobanteRepoDBF:
     """Lectura de comprobantes desde ventas.dbf + ventas_detalle.dbf."""
 
     @staticmethod
-    def _cargar_cab() -> list[tuple[dict, Any]]:
-        """Devuelve [(dict_mapeado, codigo_gecope), …] ordenado por fecha desc."""
+    def _load_cab() -> list[tuple[dict, Any]]:
+        """Lectura física de ventas.dbf (sin caché)."""
         out: list[tuple[dict, Any]] = []
         for row in _dbf("ventas.dbf"):
             d = dbf_mappers.dbf_comprobante_to_dict(row)
@@ -276,6 +378,15 @@ class ComprobanteRepoDBF:
             reverse=True,
         )
         return out
+
+    @staticmethod
+    def _cargar_cab() -> list[tuple[dict, Any]]:
+        """Devuelve cabeceras de comprobantes ordenadas (con caché TTL)."""
+        return _cached(
+            "comprobantes_cab",
+            CACHE_TTL_COMPROBANTES,
+            ComprobanteRepoDBF._load_cab,
+        )
 
     @staticmethod
     def listar(
@@ -333,16 +444,16 @@ class ComprobanteRepoDBF:
 
     @staticmethod
     def obtener(comprobante_id: int) -> Optional[dict]:
-        """Devuelve comprobante con detalles, o None."""
+        """Devuelve comprobante con detalles, o None (usa caché)."""
         cid = int(comprobante_id)
         target_cod: Any = None
         target_dict: Optional[dict] = None
 
-        for row in _dbf("ventas.dbf"):
-            d = dbf_mappers.dbf_comprobante_to_dict(row)
-            if d and d["id"] == cid:
-                target_dict = d
-                target_cod = d.get("_gecope_codigo")
+        for d, cod in ComprobanteRepoDBF._cargar_cab():
+            if d["id"] == cid:
+                # Devolvemos copia para no mutar la caché al añadir 'detalles'
+                target_dict = dict(d)
+                target_cod = cod
                 break
 
         if not target_dict:
@@ -378,23 +489,19 @@ class ComprobanteRepoDBF:
     def proximo_correlativo(
         serie: str, tipo_documento: Optional[str] = None
     ) -> dict:
-        """Devuelve el próximo correlativo libre para una serie."""
+        """Devuelve el próximo correlativo libre para una serie.
+
+        Usa la caché de cabeceras (`_cargar_cab`) en vez de re-escanear
+        ventas.dbf — el dict mapeado ya contiene serie/correlativo.
+        """
         serie_n = serie.upper()[:4]
         ultimo = 0
-        gecope_doc = (
-            dbf_mappers.SUNAT_A_GECOPE_DOC.get(tipo_documento)
-            if tipo_documento else None
-        )
-        for row in _dbf("ventas.dbf"):
-            if (row.get("SER_DOCUME") or "").strip() != serie_n:
+        for d, _cod in ComprobanteRepoDBF._cargar_cab():
+            if (d.get("serie") or "") != serie_n:
                 continue
-            if gecope_doc and (row.get("DOCUMENTO") or "").strip() != gecope_doc:
+            if tipo_documento and d.get("tipo_documento") != tipo_documento:
                 continue
-            num_raw = (row.get("NUM_DOCUME") or "0").strip()
-            try:
-                n = int(num_raw)
-            except (TypeError, ValueError):
-                continue
+            n = int(d.get("correlativo") or 0)
             if n > ultimo:
                 ultimo = n
         return {
@@ -405,21 +512,37 @@ class ComprobanteRepoDBF:
 
     @staticmethod
     def listar_series() -> list[dict]:
-        """Devuelve series existentes con su último correlativo."""
+        """Devuelve series existentes con su último correlativo (cache)."""
         ultimos: dict[str, int] = {}
-        for row in _dbf("ventas.dbf"):
-            s = (row.get("SER_DOCUME") or "").strip()
+        for d, _cod in ComprobanteRepoDBF._cargar_cab():
+            s = (d.get("serie") or "").strip()
             if not s:
                 continue
-            try:
-                n = int((row.get("NUM_DOCUME") or "0").strip())
-            except (TypeError, ValueError):
-                continue
+            n = int(d.get("correlativo") or 0)
             if n > ultimos.get(s, 0):
                 ultimos[s] = n
         items = [{"serie": s, "ultimo": n} for s, n in ultimos.items()]
         items.sort(key=lambda x: x["serie"])
         return items
+
+    @staticmethod
+    def _load_ventas_meta() -> tuple[dict[Any, Any], set[Any]]:
+        """Devuelve (fechas_por_codigo, anulados) leyendo ventas.dbf raw.
+
+        Se cachea aparte porque top_productos necesita info que no expone
+        el mapper (REGISTRO_A, DATA_BAJA crudos del DBF).
+        """
+        fechas: dict[Any, Any] = {}
+        anulados: set[Any] = set()
+        for row in _dbf("ventas.dbf"):
+            cod = row.get("CODIGO")
+            if cod is None:
+                continue
+            if bool(row.get("REGISTRO_A")) or bool(row.get("DATA_BAJA")):
+                anulados.add(cod)
+                continue
+            fechas[cod] = row.get("FECHA_EMIS")
+        return fechas, anulados
 
     @staticmethod
     def top_productos(
@@ -432,17 +555,12 @@ class ComprobanteRepoDBF:
         Filtra por fecha_emision del comprobante padre (desde/hasta) y
         descarta ventas con REGISTRO_A o ANULADO.
         """
-        # Mapa CODIGO_ventas → fecha_emision
-        fechas: dict[Any, Any] = {}
-        anulados: set[Any] = set()
-        for row in _dbf("ventas.dbf"):
-            cod = row.get("CODIGO")
-            if cod is None:
-                continue
-            if bool(row.get("REGISTRO_A")) or bool(row.get("DATA_BAJA")):
-                anulados.add(cod)
-                continue
-            fechas[cod] = row.get("FECHA_EMIS")
+        # Mapa CODIGO_ventas → fecha_emision (cacheado)
+        fechas, anulados = _cached(
+            "ventas_meta",
+            CACHE_TTL_COMPROBANTES,
+            ComprobanteRepoDBF._load_ventas_meta,
+        )
 
         agreg: dict[str, dict] = {}
         for row in _dbf("ventas_detalle.dbf"):
