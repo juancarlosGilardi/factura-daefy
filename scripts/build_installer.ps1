@@ -230,6 +230,6 @@ if (-not $SkipInnoSetup) {
     Write-Host ""
     Write-Host "[5/5] Saltando Inno Setup (-SkipInnoSetup)." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Build parcial completado. Solo se generó el .exe del launcher."
+    Write-Host "Build parcial completado. Solo se genero el .exe del launcher."
     Write-Host ""
 }

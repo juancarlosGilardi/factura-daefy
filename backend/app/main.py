@@ -17,8 +17,17 @@ var `FACTURA_MDB_SUNAT_ENV=produccion`.
 from __future__ import annotations
 
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# CRÍTICO: en Windows, mimetypes lee del registro y a veces devuelve text/plain
+# para .js, lo que rompe los module scripts del SPA React. Forzar tipos correctos.
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("application/json", ".json")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -375,3 +384,4 @@ async def spa_catch_all(full_path: str):
             detail="SPA no disponible. Falta backend/app/static/spa/index.html",
         )
     return FileResponse(str(_SPA_INDEX), media_type="text/html")
+

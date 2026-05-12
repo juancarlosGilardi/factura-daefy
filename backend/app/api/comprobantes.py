@@ -750,8 +750,48 @@ def descargar_cdr_alias(comp_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{comp_id}/pdf")
 def descargar_pdf_alias(comp_id: int, inline: int = 0,
+                         force: int = 0,
                          db: Session = Depends(get_db)):
-    """Alias de /descargar/pdf con soporte ?inline=1 para iframe."""
+    """Alias de /descargar/pdf con soporte ?inline=1 para iframe.
+
+    `force=1`: regenera el PDF aunque exista cacheado en storage/pdf/.
+    """
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF, EmpresaRepoDBF
+        from ..core.config import storage_dir
+        from ..services._dict_adapter import DictNS
+
+        comp_dict = ComprobanteRepoDBF.obtener(comp_id)
+        if comp_dict is None:
+            raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+        empresa = EmpresaRepoDBF.obtener()
+
+        num_parts = (comp_dict.get("numero_completo") or "").split("-")
+        correl = num_parts[1] if len(num_parts) == 2 else f"{int(comp_dict.get('correlativo') or 0):08d}"
+        filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
+        pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
+
+        if force or not pdf_path.exists():
+            try:
+                from ..services.pdf_generator import generar_pdf_comprobante
+                comp_ns = DictNS(comp_dict)
+                emp_ns = DictNS(empresa)
+                det_list = [DictNS(d) for d in (comp_dict.get("detalles") or [])]
+                pdf_bytes = generar_pdf_comprobante(comp_ns, det_list, emp_ns, None)
+                pdf_path.parent.mkdir(parents=True, exist_ok=True)
+                pdf_path.write_bytes(pdf_bytes)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Error generando PDF modo DBF")
+                raise HTTPException(status_code=500, detail=f"No se pudo generar PDF: {e}")
+
+        headers = {}
+        if inline:
+            headers["Content-Disposition"] = f'inline; filename="{comp_dict.get("numero_completo")}.pdf"'
+        return FileResponse(path=str(pdf_path),
+                             filename=f"{comp_dict.get('numero_completo')}.pdf",
+                             media_type="application/pdf",
+                             headers=headers)
+
     if is_mdb_mode():
         from ..core.db_adapter.repo import ComprobanteRepoMDB, EmpresaRepoMDB
         from ..core.config import storage_dir
@@ -768,8 +808,8 @@ def descargar_pdf_alias(comp_id: int, inline: int = 0,
         filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
         pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
 
-        # Regenerar si no existe
-        if not pdf_path.exists():
+        # Regenerar si no existe (o si force=1)
+        if force or not pdf_path.exists():
             try:
                 from ..services.pdf_generator import generar_pdf_comprobante
                 comp_ns = DictNS(comp_dict)
