@@ -1,4 +1,4 @@
-"""Factura-mdb — backend FastAPI local que opera SOLO contra .mdb (Access).
+"""Factura-mdb — backend FastAPI local que opera contra MDB/DBF/SQLite.
 
 Coexiste con SIAP legacy del cliente (mismo archivo .mdb compartido).
 Modo lecto-escritura desde el primer arranque (no hay modo SQLite ni
@@ -338,7 +338,10 @@ from .api import (  # noqa: E402
     clientes,
     comprobantes,
     comunicacion_baja,
+    cotizaciones_pedidos,
+    email_envio,
     empresas,
+    importar,
     legacy_emision,
     productos,
     reportes,
@@ -355,11 +358,17 @@ app.include_router(empresas.plural_router)
 app.include_router(empresas.config_router)
 app.include_router(clientes.router)
 app.include_router(productos.router)
+# Importador de productos NUEVOS desde DBF de empresa matriz (IDIVSA → Daefy).
+# Comparte prefijo /api/productos con productos.router pero solo agrega
+# rutas POST estaticas (no choca con /{producto_id}).
+app.include_router(importar.router)
 app.include_router(comprobantes.router)
 app.include_router(comprobantes.correlativos_router)
 app.include_router(comunicacion_baja.router)
 app.include_router(resumen_diario.router)
 app.include_router(reportes.router)
+app.include_router(cotizaciones_pedidos.router)
+app.include_router(email_envio.router)
 
 
 # ---------------------------------------------------------------------------
