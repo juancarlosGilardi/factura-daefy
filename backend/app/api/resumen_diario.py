@@ -9,6 +9,7 @@ from sqlalchemy import func, and_, or_, not_, exists
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
+from ..core.db_adapter import is_dbf_mode
 from ..models.comprobante import Comprobante
 from ..models.resumen import (
     ResumenDiario, ResumenDiarioItem, ComunicacionBaja, ComunicacionBajaItem,

@@ -12,6 +12,7 @@
     <div class="border-b border-gray-200 flex flex-wrap">
       <button @click="tab='empresa'" :class="tab==='empresa' ? 'text-blaugrana-500 border-blaugrana-500' : 'text-gray-600 border-transparent'" class="px-5 py-3 border-b-2 font-medium text-sm">Empresa</button>
       <button @click="tab='config'" :class="tab==='config' ? 'text-blaugrana-500 border-blaugrana-500' : 'text-gray-600 border-transparent'" class="px-5 py-3 border-b-2 font-medium text-sm">Preferencias</button>
+      <button @click="tab='dbf'" :class="tab==='dbf' ? 'text-blaugrana-500 border-blaugrana-500' : 'text-gray-600 border-transparent'" class="px-5 py-3 border-b-2 font-medium text-sm">DBF</button>
       <button @click="tab='sunat'" :class="tab==='sunat' ? 'text-blaugrana-500 border-blaugrana-500' : 'text-gray-600 border-transparent'" class="px-5 py-3 border-b-2 font-medium text-sm">SUNAT</button>
       <button @click="tab='backup'" :class="tab==='backup' ? 'text-blaugrana-500 border-blaugrana-500' : 'text-gray-600 border-transparent'" class="px-5 py-3 border-b-2 font-medium text-sm">Backup</button>
     </div>
@@ -114,6 +115,34 @@
       </div>
     </div>
 
+    <!-- DBF Path -->
+    <div x-show="tab==='dbf'" class="p-5 space-y-4">
+      <h3 class="font-display font-semibold text-gray-800">Configuración de DBFs</h3>
+      <p class="text-sm text-gray-600">Especifica la carpeta donde se encuentran los archivos DBF (cliente.dbf, ventas.dbf, ventas_detalle.dbf).</p>
+
+      <div x-show="dbfPath" class="bg-blaugrana-50 border border-blaugrana-200 rounded-lg p-3">
+        <div class="text-sm font-medium text-gray-800">Ruta actual</div>
+        <div class="text-xs text-gray-700 mt-1 font-mono break-all" x-text="dbfPath"></div>
+      </div>
+
+      <div class="space-y-2">
+        <label class="text-xs font-medium text-gray-600 uppercase tracking-wider">Nueva ruta de DBFs</label>
+        <input type="text" x-model="nuevaRutaDBF" placeholder="Ej: C:\SIAP\data\daefy o /home/usuario/daefy" class="w-full border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blaugrana-500"/>
+        <p class="text-xs text-gray-500">Usa una ruta absoluta a la carpeta que contiene los DBFs.</p>
+      </div>
+
+      <div class="flex gap-2">
+        <button @click="validarYGuardarDBF()" :disabled="!nuevaRutaDBF || validandoDBF" class="px-4 py-2 rounded-lg bg-blaugrana-500 hover:bg-blaugrana-600 text-white font-medium disabled:opacity-50">
+          <span x-show="!validandoDBF">Validar y guardar</span>
+          <span x-show="validandoDBF">Validando...</span>
+        </button>
+      </div>
+
+      <div x-show="infoDBF" :class="infoDBF.tipo === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'" class="border rounded-lg p-3">
+        <div :class="infoDBF.tipo === 'success' ? 'text-green-800' : 'text-red-800'" class="text-sm font-medium" x-text="infoDBF.mensaje"></div>
+      </div>
+    </div>
+
     <!-- SUNAT -->
     <div x-show="tab==='sunat'" class="p-5 space-y-4">
       <h3 class="font-display font-semibold text-gray-800">Credenciales SUNAT</h3>
@@ -185,13 +214,22 @@ function configPage() {
     empresa: {}, config: {},
     cargando: false, guardando: false, subiendo: false,
     archivoCert: null, passCert: '',
+    dbfPath: '', nuevaRutaDBF: '', validandoDBF: false, infoDBF: null,
 
     async cargar() {
       this.cargando = true;
       try {
-        const [r1, r2] = await Promise.all([fetch('/api/empresa'), fetch('/api/configuracion')]);
+        const [r1, r2, r3] = await Promise.all([
+          fetch('/api/empresa'),
+          fetch('/api/configuracion'),
+          fetch('/api/configuracion/dbf-path')
+        ]);
         if (r1.ok) this.empresa = await r1.json();
         if (r2.ok) this.config = await r2.json();
+        if (r3.ok) {
+          const data = await r3.json();
+          this.dbfPath = data.path;
+        }
       } catch (e) { window.toast('error', e.message); }
       finally { this.cargando = false; }
     },
@@ -240,6 +278,37 @@ function configPage() {
         this.cargar();
       } catch (e) { window.toast('error', e.message); }
       finally { this.subiendo = false; }
+    },
+
+    async validarYGuardarDBF() {
+      if (!this.nuevaRutaDBF) {
+        this.infoDBF = { tipo: 'error', mensaje: 'Ingresa una ruta válida' };
+        return;
+      }
+      this.validandoDBF = true;
+      this.infoDBF = null;
+      try {
+        const res = await fetch('/api/configuracion/dbf-path', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dbf_path: this.nuevaRutaDBF }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+        }
+        this.infoDBF = { tipo: 'success', mensaje: 'DBF guardado correctamente. Ruta: ' + data.path };
+        this.dbfPath = data.path;
+        this.nuevaRutaDBF = '';
+        window.toast('success', 'Configuración de DBF actualizada');
+        // Recarga la página después de 2 segundos para que los cambios se reflejen
+        setTimeout(() => window.location.reload(), 2000);
+      } catch (e) {
+        this.infoDBF = { tipo: 'error', mensaje: e.message };
+        window.toast('error', e.message);
+      } finally {
+        this.validandoDBF = false;
+      }
     },
   };
 }

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+@page { size: A4; margin: 7mm 7mm 7mm 7mm }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; color: #111; background: #fff }
+
+/* ── ENCABEZADO ─────────────────────────────────────── */
+.hdr-table { width: 100%; border-collapse: collapse; border: 1.5px solid #555; background: #fff; margin-bottom: 2px }
+.hdr-logo { width: 85px; padding: 5px 6px; vertical-align: middle; border-right: 1px solid #ccc; text-align: center }
+.hdr-logo img { max-width: 78px; max-height: 72px; object-fit: contain }
+.hdr-logo-ph { width: 78px; height: 72px; background: #fff; border: 1px solid #aaa; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #2e7d32 }
+.hdr-company { padding: 5px 10px; vertical-align: middle; text-align: center }
+.hdr-company .co-idivsa { font-size: 15px; font-weight: 900; letter-spacing: 3px; color: #111 }
+.hdr-company .co-slogan { font-size: 8px; font-weight: 700; color: #c62828; letter-spacing: 2px; margin-top: 1px }
+.hdr-company .co-razon { font-size: 10px; font-weight: 700; color: #111; margin-bottom: 1px }
+.hdr-company .co-comercial { font-size: 9px; font-weight: 600; color: #111 }
+.hdr-company .co-dir { font-size: 8px; color: #333; margin-top: 2px; line-height: 1.45 }
+.hdr-company .co-tel { font-size: 8px; color: #333; line-height: 1.45 }
+.hdr-company .co-web { font-size: 8px; color: #0b5394; font-weight: 700; line-height: 1.45 }
+.hdr-docbox { width: 178px; padding: 8px 10px; vertical-align: middle; text-align: center; border-left: 2px solid #333; background: #fff }
+.docbox-ruc { font-size: 11px; font-weight: 700; color: #111 }
+.docbox-tipo { font-size: 10px; font-weight: 700; color: #111; margin-top: 4px; text-transform: uppercase }
+.docbox-num { font-size: 12px; font-weight: 900; color: #111; margin-top: 4px; border: 1.5px solid #333; padding: 2px 6px; display: inline-block; font-family: 'Courier New', monospace }
+
+/* ── DATOS CLIENTE / DOCUMENTO ──────────────────────── */
+.datos-table { width: 100%; border-collapse: collapse; border: 1px solid #666; background: #fff; margin-bottom: 3px }
+.datos-table td { padding: 2px 6px; vertical-align: top }
+.datos-left { border-right: 1px solid #999; font-size: 9px; width: 68% }
+.datos-right { font-size: 9px; padding-left: 10px }
+.datos-left .drow { display: block; margin-bottom: 1px }
+.datos-left .dlbl { font-weight: 400; color: #111 }
+.datos-left .dval { font-weight: 700; color: #111 }
+.datos-right .drow { display: block; margin-bottom: 2px }
+
+/* ── TABLA ITEMS ─────────────────────────────────────── */
+.items-table { width: 100%; border-collapse: collapse; margin-bottom: 3px }
+.items-table thead tr { background: #fff }
+.items-table thead td { padding: 3px 5px; font-size: 8.5px; font-weight: 700; border-top: 1.5px solid #444; border-bottom: 1.5px solid #444; color: #111; vertical-align: middle }
+.items-table thead td.ar { text-align: right }
+.items-table thead td.ac { text-align: center }
+.items-table tbody tr { background: #fff }
+.items-table tbody td { padding: 2.5px 5px; font-size: 9px; border-bottom: 0.5px solid #ccc; color: #111 }
+.items-table tbody td.ar { text-align: right; font-family: 'Courier New', monospace }
+.items-table tbody td.ac { text-align: center }
+.items-table tfoot td { padding: 2px 5px; font-size: 8px; color: #444 }
+
+/* ── CREDITO ─────────────────────────────────────────── */
+.credito-line { font-size: 9px; font-weight: 700; color: #111; margin-bottom: 3px; padding: 2px 0 }
+
+/* ── DETRACCION ──────────────────────────────────────── */
+.detraccion-box { border: 1.5px solid #e65100; padding: 3px 7px; background: #fff8f0; margin-bottom: 3px; font-size: 8.5px; color: #b71c1c; font-weight: 700 }
+
+/* ── SECCIÓN INFERIOR ────────────────────────────────── */
+.bottom-area { display: table; width: 100%; margin-bottom: 3px }
+.bottom-left { display: table-cell; vertical-align: bottom; padding-right: 8px }
+.bottom-right { display: table-cell; vertical-align: bottom; width: 220px }
+
+/* SON */
+.son-line { font-size: 9px; color: #111; margin-bottom: 2px }
+.son-line strong { font-weight: 700 }
+.vendedor-son { font-size: 9px; font-weight: 700; color: #111; margin-bottom: 5px }
+
+/* CONDICIONES */
+.cond-bold { font-size: 8.5px; font-weight: 900; color: #111; margin-bottom: 1px; font-style: italic }
+.cond-girar { font-size: 8px; font-style: italic; color: #111; margin-bottom: 0 }
+.cond-empresa { font-size: 8.5px; font-weight: 700; color: #111; margin-bottom: 3px }
+.cond-cancel { font-size: 8.5px; color: #111; margin-top: 3px }
+.check-box { display: inline-block; width: 10px; height: 10px; border: 1px solid #555; margin: 0 2px; vertical-align: middle }
+.line-blank { display: inline-block; width: 80px; border-bottom: 1px solid #555; margin: 0 2px; vertical-align: middle }
+
+/* TOTALES */
+.tot-table { width: 220px; border-collapse: collapse; border: 1.5px solid #444 }
+.tot-table tr td { padding: 2.5px 7px; font-size: 9px; border-bottom: 0.5px solid #ccc }
+.tot-table tr td:first-child { color: #111; font-weight: 400; white-space: nowrap }
+.tot-table tr td:last-child { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; white-space: nowrap }
+.tot-table tr.tot-final td { background: #fff; font-weight: 900; font-size: 10px; border-top: 1.5px solid #333; border-bottom: none }
+.tot-table tr.tot-final td:last-child { font-size: 10.5px }
+
+/* BANCO / FOOTER */
+.banco-line { font-size: 8.5px; font-weight: 700; color: #111; margin-bottom: 2px; margin-top: 3px }
+</style>
+</head>
+<body>
+
+{# Preferir archivo en disco (mejor para xhtml2pdf). Fallback base64 #}
+{% set logo_src = '' %}
+{% if logo_path %}
+  {% set logo_src = logo_path %}
+{% elif logo_b64 %}
+  {% set logo_src = logo_b64 if logo_b64.startswith('data:') else ('data:image/png;base64,' + logo_b64) %}
+{% endif %}
+
+<!-- ══ ENCABEZADO ══ -->
+<table class="hdr-table">
+  <tr>
+    <td class="hdr-logo">
+      {% if logo_src %}
+        <img src="{{ logo_src }}" alt="Logo">
+      {% elif empresa.logo_url %}
+        <img src="{{ empresa.logo_url }}" alt="Logo">
+      {% else %}
+        <div class="hdr-logo-ph">{{ empresa.razon_social[:2] }}</div>
+      {% endif %}
+    </td>
+    <td class="hdr-company">
+      {% if empresa.nombre_comercial %}
+        <div class="co-idivsa">{{ empresa.nombre_comercial }}</div>
+        {% if empresa.slogan %}
+          <div class="co-slogan">{{ empresa.slogan }}</div>
+        {% endif %}
+      {% endif %}
+      <div class="co-razon">{{ empresa.razon_social }}</div>
+      <div class="co-dir" style="margin-top:3px">{{ empresa.direccion or '' }}</div>
+      {% if empresa.telefono %}
+      <div class="co-tel">Teléfonos: {{ empresa.telefono }}</div>
+      {% endif %}
+      {% if empresa.sitio_web or empresa.email %}
+      <div class="co-web">
+        {% if empresa.sitio_web %}{{ empresa.sitio_web }}{% endif %}
+        {% if empresa.sitio_web and empresa.email %} &nbsp;·&nbsp; {% endif %}
+        {% if empresa.email %}E-mail: {{ empresa.email }}{% endif %}
+      </div>
+      {% endif %}
+    </td>
+    <td class="hdr-docbox">
+      <div class="docbox-ruc">R.U.C. {{ empresa.ruc }}</div>
+      <div class="docbox-tipo">{{ tipo_nombre }}</div>
+      <div><span class="docbox-num">{{ comprobante.numero_completo }}</span></div>
+    </td>
+  </tr>
+</table>
+
+<!-- ══ DATOS CLIENTE + DOCUMENTO ══ -->
+<table class="datos-table">
+  <tr>
+    <td class="datos-left">
+      <span class="drow"><span class="dlbl">Señor(es):&nbsp;</span><span class="dval">{{ comprobante.cliente_razon_social }}</span></span>
+      <span class="drow"><span class="dlbl">Dirección:&nbsp;</span><span class="dval">{{ comprobante.cliente_direccion or '' }}</span></span>
+      <span class="drow"><span class="dlbl">{{ 'R.U.C.' if comprobante.cliente_tipo_doc == '6' else ('D.N.I.' if comprobante.cliente_tipo_doc == '1' else ('C.E.' if comprobante.cliente_tipo_doc == '4' else 'Doc.')) }}:&nbsp;</span><span class="dval">{{ comprobante.cliente_numero_doc }}</span></span>
+      <span class="drow">
+        <span class="dlbl">Fecha Emisión:&nbsp;</span><span class="dval">{{ comprobante.fecha_emision }}</span>
+        {% if comprobante.hora_emision %}&nbsp;&nbsp;<span class="dval">{{ comprobante.hora_emision }}</span>{% endif %}
+      </span>
+      <span class="drow"><span class="dlbl">Forma de pago:&nbsp;</span><span class="dval">{% if comprobante.forma_pago_json %}{% if comprobante.forma_pago_json.tipo == 'credito' %}CREDITO{% else %}CONTADO{% endif %}{% endif %}</span></span>
+      <span class="drow"><span class="dlbl">Vendedor:&nbsp;</span><span class="dval">{{ comprobante.codigo_trabajador or '' }}</span></span>
+    </td>
+    <td class="datos-right">
+      {% if comprobante.numero_cotizacion %}<span class="drow"><span class="dlbl">Proforma:&nbsp;</span><span class="dval">{{ comprobante.numero_cotizacion }}</span></span>{% endif %}
+      <span class="drow"><span class="dlbl">Moneda:&nbsp;</span><span class="dval">{% if comprobante.moneda == 'PEN' %}Soles{% elif comprobante.moneda == 'USD' %}Dolares{% else %}{{ comprobante.moneda }}{% endif %}</span></span>
+    </td>
+  </tr>
+</table>
+
+<!-- ══ TABLA DE ITEMS ══ -->
+<table class="items-table">
+  <thead>
+    <tr>
+      <td style="width:24px" class="ac">Item</td>
+      <td style="width:52px" class="ac">Cantidad</td>
+      <td style="width:34px" class="ac">U.M.</td>
+      <td style="width:78px" class="ac">Código</td>
+      <td><strong>D E S C R I P C I Ó N</strong></td>
+      <td style="width:62px" class="ar">Precio<br>Unitario</td>
+      <td style="width:68px" class="ar">Precio<br>Venta</td>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in detalles %}
+    <tr>
+      <td class="ac">{{ "%02d"|format(d.numero_orden) }}</td>
+      <td class="ar">{{ d.cantidad|money }}</td>
+      <td class="ac">{{ d.unidad_medida }}</td>
+      <td class="ac" style="font-family:'Courier New',monospace;font-size:8.5px">{{ d.codigo or '' }}</td>
+      <td>{{ d.descripcion }}</td>
+      <td class="ar">{{ d.precio_unitario|money }}</td>
+      <td class="ar" style="font-weight:700">{{ d.total|money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ══ DETALLE DE CRÉDITO ══ -->
+{% if comprobante.forma_pago_json and comprobante.forma_pago_json.tipo == 'credito' and comprobante.forma_pago_json.cuotas %}
+<div class="credito-line">
+  {% for cuota in comprobante.forma_pago_json.cuotas %}
+  Detalle del crédito: Cuota {{ loop.index }} FV {{ cuota.fecha }} Monto {{ comprobante.moneda }} {{ cuota.monto|money }}{% if not loop.last %} | {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ══ DETRACCIÓN ══ -->
+{% if comprobante.detraccion_codigo %}
+<div class="detraccion-box">
+  OPERACIÓN SUJETA AL SPOT (DETRACCIÓN) — Cód: {{ comprobante.detraccion_codigo }} — Tasa: {{ comprobante.detraccion_tasa }}% — Monto: S/ {{ comprobante.detraccion_monto|money }}{% if comprobante.detraccion_cta_bn %} — Cta. BN: {{ comprobante.detraccion_cta_bn }}{% endif %}
+</div>
+{% endif %}
+
+<!-- ══ SECCIÓN INFERIOR: SON + CONDICIONES (izq) | TOTALES (der) ══ -->
+
+<!-- SON (monto en letras) -->
+<div class="son-line"><strong>SON: </strong>{{ comprobante.monto_letras }}</div>
+{% if comprobante.codigo_trabajador %}<div class="vendedor-son">{{ comprobante.codigo_trabajador }}</div>{% endif %}
+
+<table style="width:100%;border-collapse:collapse;margin-bottom:3px">
+  <tr>
+    <!-- IZQUIERDA: condiciones -->
+    <td style="vertical-align:bottom;padding-right:8px">
+      <div class="cond-bold">NO SE ACEPTAN CAMBIOS NI DEVOLUCIONES, SUJETO A PENALIDAD</div>
+      <div class="cond-girar">SIRVASE GIRAR CHEQUE EXCLUSIVAMENTE A LA ORDEN DE:</div>
+      <div class="cond-empresa">{{ empresa.razon_social }}</div>
+      <div class="cond-cancel">
+        <strong>CANCELACION:</strong>&nbsp;&nbsp;
+        Efectivo <span class="check-box"></span>&nbsp;
+        Cheque <span class="line-blank"></span>&nbsp;
+        Banco <span class="line-blank"></span>
+      </div>
+    </td>
+    <!-- DERECHA: totales -->
+    <td style="vertical-align:bottom;width:220px">
+      <table class="tot-table">
+        <tr>
+          <td>Importe bruto:</td>
+          <td>{{ "%.2f"|format(comprobante.total_gravado + (comprobante.total_descuento_items or 0) + (comprobante.descuento_global_monto or 0) + (comprobante.total_exonerado or 0) + (comprobante.total_inafecto or 0)) }}</td>
+        </tr>
+        {% set total_desc = (comprobante.total_descuento_items or 0) + (comprobante.descuento_global_monto or 0) %}
+        <tr>
+          <td>Total Dctos.(Items+Global):</td>
+          <td>{% if total_desc > 0 %}-{{ total_desc|money }}{% else %}0.00{% endif %}</td>
+        </tr>
+        <tr>
+          <td>Sub-total:</td>
+          <td>{{ comprobante.subtotal|money }}</td>
+        </tr>
+        <tr>
+          <td>I.G.V. ({{ config.igv_rate }}%):</td>
+          <td>{{ comprobante.total_igv|money }}</td>
+        </tr>
+        {% if comprobante.total_icbper and comprobante.total_icbper > 0 %}
+        <tr><td>ICBPER:</td><td>{{ comprobante.total_icbper|money }}</td></tr>
+        {% endif %}
+        {% if comprobante.percepcion_monto and comprobante.percepcion_monto > 0 %}
+        <tr><td>Percepción:</td><td>{{ comprobante.percepcion_monto|money }}</td></tr>
+        {% endif %}
+        <tr class="tot-final">
+          <td><strong>Importe Total:</strong></td>
+          <td><strong>{{ comprobante.moneda }} {{ comprobante.total_venta|money }}</strong></td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- ══ BANCO / CUENTA ══ -->
+<div class="banco-line">CTA CTE. BCP {{ 'DOLAR' if comprobante.moneda == 'USD' else 'SOLES' }} Nº {{ config.cuenta_bcp if config.cuenta_bcp else '' }}&nbsp;&nbsp;&nbsp;&nbsp;Lima ..... de .............................. del {{ comprobante.fecha_emision.year if comprobante.fecha_emision and comprobante.fecha_emision.__class__.__name__ != 'str' else (comprobante.fecha_emision|string)[-4:] }}</div>
+
+<!-- ══ QR + FOOTER ══ -->
+<table style="width:100%;border-collapse:collapse;border-top:1px solid #888;padding-top:4px;margin-top:2px">
+  <tr>
+    <td style="vertical-align:top;width:80px;padding-right:8px">
+      {% if qr_b64 %}
+        <img src="data:image/png;base64,{{ qr_b64 }}" alt="QR SUNAT" style="width:75px;height:75px">
+      {% else %}
+        <div style="width:75px;height:75px;border:1px solid #aaa;display:flex;align-items:center;justify-content:center;font-size:7px;color:#888;text-align:center">QR SUNAT</div>
+      {% endif %}
+    </td>
+    <td style="vertical-align:top;font-size:7.5px;color:#333;line-height:1.6">
+      Representación Impresa de la factura electrónica, autorizado mediante resolución Nº 328-2016/SUNAT<br>
+      Para consultar su comprobante electrónico ingrese a: <strong>www.sunat.gob.pe</strong>
+      {% if comprobante.xml_hash %}<br><span style="font-family:'Courier New',monospace;font-size:7px;word-break:break-all">Hash: {{ comprobante.xml_hash }}</span>{% endif %}
+    </td>
+    <td style="vertical-align:top;text-align:right;width:150px;font-size:8px;color:#111;line-height:1.7;white-space:nowrap">
+      {% if comprobante.tipo_cambio and comprobante.moneda != 'PEN' %}T.C. S/{{ "%.3f"|format(comprobante.tipo_cambio) }}<br>{% endif %}
+      {% if comprobante.codigo_trabajador %}Cod. Digitador: {{ comprobante.codigo_trabajador }}<br>{% endif %}
+      {{ comprobante.fecha_emision }}{% if comprobante.hora_emision %} {{ comprobante.hora_emision }}{% endif %}
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

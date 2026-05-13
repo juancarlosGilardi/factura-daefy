@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+@page { size: A4; margin: 7mm 7mm 7mm 7mm }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 9px; color: #111; background: #fff }
+
+.hdr-table { width: 100%; border-collapse: collapse; border: 1.5px solid #555; background: #fff; margin-bottom: 2px }
+.hdr-logo { width: 85px; padding: 5px 6px; vertical-align: middle; border-right: 1px solid #ccc; text-align: center }
+.hdr-logo img { max-width: 78px; max-height: 72px; object-fit: contain }
+.hdr-logo-ph { width: 78px; height: 72px; background: #fff; border: 1px solid #aaa; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #2e7d32 }
+.hdr-company { padding: 5px 10px; vertical-align: middle; text-align: center }
+.hdr-company .co-idivsa { font-size: 15px; font-weight: 900; letter-spacing: 3px; color: #111 }
+.hdr-company .co-slogan { font-size: 8px; font-weight: 700; color: #c62828; letter-spacing: 2px; margin-top: 1px }
+.hdr-company .co-razon { font-size: 10px; font-weight: 700; color: #111; margin-bottom: 1px }
+.hdr-company .co-dir { font-size: 8px; color: #333; margin-top: 2px; line-height: 1.45 }
+.hdr-company .co-tel { font-size: 8px; color: #333; line-height: 1.45 }
+.hdr-company .co-web { font-size: 8px; color: #0b5394; font-weight: 700; line-height: 1.45 }
+.hdr-docbox { width: 178px; padding: 8px 10px; vertical-align: middle; text-align: center; border-left: 2px solid #333; background: #fff }
+.docbox-ruc { font-size: 11px; font-weight: 700; color: #111 }
+.docbox-tipo-ped { font-size: 11px; font-weight: 700; color: #d97706; margin-top: 4px; text-transform: uppercase }
+.docbox-tipo-cot { font-size: 11px; font-weight: 700; color: #0b5394; margin-top: 4px; text-transform: uppercase }
+.docbox-num { font-size: 12px; font-weight: 900; color: #111; margin-top: 4px; border: 1.5px solid #333; padding: 2px 6px; display: inline-block; font-family: 'Courier New', monospace }
+
+.banner-nofac { border: 1.5px dashed #b71c1c; color: #b71c1c; font-size: 8.5px; font-weight: 800; text-align: center; padding: 3px; margin-bottom: 3px; background: #fff }
+
+.datos-table { width: 100%; border-collapse: collapse; border: 1px solid #666; background: #fff; margin-bottom: 3px }
+.datos-table td { padding: 2px 6px; vertical-align: top }
+.datos-left { border-right: 1px solid #999; font-size: 9px; width: 68% }
+.datos-right { font-size: 9px; padding-left: 10px }
+.datos-left .drow { display: block; margin-bottom: 1px }
+.datos-left .dlbl { font-weight: 400; color: #111 }
+.datos-left .dval { font-weight: 700; color: #111 }
+.datos-right .drow { display: block; margin-bottom: 2px }
+
+.items-table { width: 100%; border-collapse: collapse; margin-bottom: 3px }
+.items-table thead td { padding: 3px 5px; font-size: 8.5px; font-weight: 700; border-top: 1.5px solid #444; border-bottom: 1.5px solid #444; color: #111; vertical-align: middle }
+.items-table thead td.ar { text-align: right }
+.items-table thead td.ac { text-align: center }
+.items-table tbody td { padding: 2.5px 5px; font-size: 9px; border-bottom: 0.5px solid #ccc; color: #111 }
+.items-table tbody td.ar { text-align: right; font-family: 'Courier New', monospace }
+.items-table tbody td.ac { text-align: center }
+
+.son-line { font-size: 9px; color: #111; margin-bottom: 2px; margin-top: 5px }
+.son-line strong { font-weight: 700 }
+
+.cond-box { border: 1px solid #999; padding: 4px 8px; background: #fafafa; margin-bottom: 3px; font-size: 8.5px; line-height: 1.5 }
+.cond-box strong { font-weight: 700; color: #111 }
+
+.tot-table { width: 220px; border-collapse: collapse; border: 1.5px solid #444 }
+.tot-table tr td { padding: 2.5px 7px; font-size: 9px; border-bottom: 0.5px solid #ccc }
+.tot-table tr td:first-child { color: #111; font-weight: 400; white-space: nowrap }
+.tot-table tr td:last-child { text-align: right; font-family: 'Courier New', monospace; font-weight: 600; white-space: nowrap }
+.tot-table tr.tot-final td { background: #fff; font-weight: 900; font-size: 10px; border-top: 1.5px solid #333; border-bottom: none }
+.tot-table tr.tot-final td:last-child { font-size: 10.5px }
+
+.firmas-table { width: 100%; border-collapse: collapse; margin-top: 20px }
+.firmas-table td { padding: 6px 10px; vertical-align: bottom; text-align: center; font-size: 8.5px; color: #333 }
+.firmas-line { border-top: 1px solid #111; margin-top: 30px; padding-top: 3px; font-weight: 700 }
+
+.footer-note { font-size: 8px; color: #555; text-align: center; margin-top: 8px; font-style: italic }
+</style>
+</head>
+<body>
+
+{% set logo_src = '' %}
+{% if logo_path %}{% set logo_src = logo_path %}
+{% elif logo_b64 %}{% set logo_src = logo_b64 if logo_b64.startswith('data:') else ('data:image/png;base64,' + logo_b64) %}
+{% endif %}
+
+{% set es_pedido = pedido.tipo_pedido == 'PEDIDO' %}
+{% set titulo = 'NOTA DE PEDIDO' if es_pedido else 'COTIZACIÓN' %}
+
+<table class="hdr-table">
+  <tr>
+    <td class="hdr-logo">
+      {% if logo_src %}<img src="{{ logo_src }}" alt="Logo">
+      {% else %}<div class="hdr-logo-ph">{{ empresa.razon_social[:2] }}</div>{% endif %}
+    </td>
+    <td class="hdr-company">
+      {% if empresa.nombre_comercial %}
+        <div class="co-idivsa">{{ empresa.nombre_comercial }}</div>
+        {% if empresa.slogan %}<div class="co-slogan">{{ empresa.slogan }}</div>{% endif %}
+      {% endif %}
+      <div class="co-razon">{{ empresa.razon_social }}</div>
+      <div class="co-dir" style="margin-top:3px">{{ empresa.direccion or '' }}</div>
+      {% if empresa.telefono %}<div class="co-tel">Teléfonos: {{ empresa.telefono }}</div>{% endif %}
+      {% if empresa.sitio_web or empresa.email %}
+      <div class="co-web">
+        {% if empresa.sitio_web %}{{ empresa.sitio_web }}{% endif %}
+        {% if empresa.sitio_web and empresa.email %} &nbsp;·&nbsp; {% endif %}
+        {% if empresa.email %}E-mail: {{ empresa.email }}{% endif %}
+      </div>
+      {% endif %}
+    </td>
+    <td class="hdr-docbox">
+      <div class="docbox-ruc">R.U.C. {{ empresa.ruc }}</div>
+      <div class="{{ 'docbox-tipo-ped' if es_pedido else 'docbox-tipo-cot' }}">{{ titulo }}</div>
+      <div><span class="docbox-num">{{ pedido.numero_completo }}</span></div>
+    </td>
+  </tr>
+</table>
+
+<div class="banner-nofac">ESTE DOCUMENTO NO CONSTITUYE COMPROBANTE DE PAGO</div>
+
+<table class="datos-table">
+  <tr>
+    <td class="datos-left">
+      <span class="drow"><span class="dlbl">Señor(es):&nbsp;</span><span class="dval">{{ pedido.cliente_razon_social }}</span></span>
+      <span class="drow"><span class="dlbl">Dirección:&nbsp;</span><span class="dval">{{ pedido.cliente_direccion or '—' }}</span></span>
+      <span class="drow"><span class="dlbl">{{ 'R.U.C.' if pedido.cliente_tipo_doc == '6' else ('D.N.I.' if pedido.cliente_tipo_doc == '1' else 'Doc.') }}:&nbsp;</span><span class="dval">{{ pedido.cliente_numero_doc }}</span></span>
+      <span class="drow"><span class="dlbl">Fecha Emisión:&nbsp;</span><span class="dval">{{ pedido.fecha_emision }}</span></span>
+      <span class="drow"><span class="dlbl">Condición de pago:&nbsp;</span><span class="dval">{{ pedido.condicion_pago or 'Contado' }}</span></span>
+      <span class="drow"><span class="dlbl">Vendedor:&nbsp;</span><span class="dval">{{ pedido.vendedor or '—' }}</span></span>
+    </td>
+    <td class="datos-right">
+      <span class="drow"><span class="dlbl">Moneda:&nbsp;</span><span class="dval">{% if pedido.moneda == 'PEN' %}Soles{% elif pedido.moneda == 'USD' %}Dólares{% else %}{{ pedido.moneda }}{% endif %}</span></span>
+      {% if pedido.validez_dias %}<span class="drow"><span class="dlbl">Validez:&nbsp;</span><span class="dval">{{ pedido.validez_dias }} días</span></span>{% endif %}
+      {% if pedido.fecha_vencimiento %}<span class="drow"><span class="dlbl">Vence:&nbsp;</span><span class="dval">{{ pedido.fecha_vencimiento }}</span></span>{% endif %}
+      <span class="drow"><span class="dlbl">Estado:&nbsp;</span><span class="dval">{{ pedido.estado }}</span></span>
+    </td>
+  </tr>
+</table>
+
+<table class="items-table">
+  <thead>
+    <tr>
+      <td style="width:24px" class="ac">Item</td>
+      <td style="width:52px" class="ac">Cantidad</td>
+      <td style="width:34px" class="ac">U.M.</td>
+      <td style="width:78px" class="ac">Código</td>
+      <td><strong>D E S C R I P C I Ó N</strong></td>
+      <td style="width:62px" class="ar">Precio<br>Unitario</td>
+      <td style="width:68px" class="ar">Precio<br>Venta</td>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in detalles %}
+    <tr>
+      <td class="ac">{{ "%02d"|format(loop.index) }}</td>
+      <td class="ar">{{ d.cantidad|money }}</td>
+      <td class="ac">{{ d.unidad_medida }}</td>
+      <td class="ac" style="font-family:'Courier New',monospace;font-size:8.5px">{{ d.codigo or '' }}</td>
+      <td>{{ d.descripcion }}</td>
+      <td class="ar">{{ d.precio_unitario|money }}</td>
+      <td class="ar" style="font-weight:700">{{ d.total|money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if monto_letras %}<div class="son-line"><strong>SON: </strong>{{ monto_letras }}</div>{% endif %}
+
+<table style="width:100%;border-collapse:collapse;margin-bottom:3px">
+  <tr>
+    <td style="vertical-align:top;padding-right:8px">
+      <div class="cond-box">
+        {% if es_pedido %}<strong>CONDICIONES DE ENTREGA:</strong> sujetas a stock al momento de facturación.<br>
+        {% else %}<strong>VALIDEZ DE LA OFERTA:</strong> {{ pedido.validez_dias or 15 }} días desde la fecha de emisión.<br>{% endif %}
+        {% if pedido.condicion_pago %}<strong>CONDICIÓN DE PAGO:</strong> {{ pedido.condicion_pago }}<br>{% endif %}
+        {% if pedido.observaciones %}<strong>OBSERVACIONES:</strong> {{ pedido.observaciones }}{% endif %}
+      </div>
+      <div style="font-size:8px;color:#444;margin-top:3px">
+        <em>Sujeto a disponibilidad de stock · Documento informativo</em>
+      </div>
+    </td>
+    <td style="vertical-align:top;width:220px">
+      <table class="tot-table">
+        {% if pedido.total_gravado and pedido.total_gravado > 0 %}<tr><td>Op. Gravadas:</td><td>{{ pedido.total_gravado|money }}</td></tr>{% endif %}
+        {% if pedido.total_exonerado and pedido.total_exonerado > 0 %}<tr><td>Op. Exoneradas:</td><td>{{ pedido.total_exonerado|money }}</td></tr>{% endif %}
+        {% if pedido.total_inafecto and pedido.total_inafecto > 0 %}<tr><td>Op. Inafectas:</td><td>{{ pedido.total_inafecto|money }}</td></tr>{% endif %}
+        {% if pedido.descuento_global_monto and pedido.descuento_global_monto > 0 %}<tr><td>Desc. global ({{ pedido.descuento_global_pct|money(1) }}%):</td><td>-{{ pedido.descuento_global_monto|money }}</td></tr>{% endif %}
+        <tr><td>I.G.V. (18.0%):</td><td>{{ (pedido.total_igv or 0)|money }}</td></tr>
+        <tr class="tot-final">
+          <td><strong>Importe Total:</strong></td>
+          <td><strong>{{ pedido.moneda }} {{ (pedido.total_venta or 0)|money }}</strong></td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<table class="firmas-table">
+  <tr>
+    <td style="width:50%">
+      <div class="firmas-line">Recibido por el Cliente</div>
+      <div style="font-size:7px;color:#888">Firma y sello</div>
+    </td>
+    <td style="width:50%">
+      <div class="firmas-line">{{ empresa.nombre_comercial or empresa.razon_social }}</div>
+      <div style="font-size:7px;color:#888">Atendido por: {{ pedido.vendedor or '—' }}</div>
+    </td>
+  </tr>
+</table>
+
+<div class="footer-note">
+  {{ titulo }} {{ pedido.numero_completo }} · Generado el {{ pedido.fecha_emision }}
+  {% if pedido.comprobante_id %} · Facturado con comprobante #{{ pedido.comprobante_id }}{% endif %}
+</div>
+
+</body>
+</html>

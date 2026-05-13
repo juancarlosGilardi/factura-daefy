@@ -63,3 +63,12 @@ htmlcov/
 
 # Datos locales temporales
 .local-data/
+
+# Datos locales (NO subir al repo - vienen del VPS)
+data/daefy/*.dbf
+data/daefy/*.DBF
+data/daefy/*.fpt
+data/daefy/*.FPT
+data/daefy/*.cdx
+data/daefy/*.CDX
+certs/*.pfx

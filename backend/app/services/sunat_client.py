@@ -8,8 +8,12 @@ import base64
 import zipfile
 import io
 import logging
+import ssl
 from xml.sax.saxutils import escape as _xml_escape
 from typing import Tuple, Optional
+
+import certifi
+
 from ..core.config import settings
 
 
@@ -18,6 +22,18 @@ logger = logging.getLogger(__name__)
 
 # Timeout SUNAT: connect rapido, read amplio (SUNAT a veces tarda)
 _SUNAT_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
+
+# SSL: SUNAT BETA tiene problemas de revocation check (CA no responde OCSP/CRL).
+# Es un ambiente de pruebas oficial, no es seguridad real. Por eso BETA usa
+# verify=False. PRODUCCION valida estricto con certifi.
+#
+# Comportamiento:
+#   - settings.SUNAT_ENV == 'produccion' → verify=certifi (validacion completa)
+#   - settings.SUNAT_ENV == 'beta'       → verify=False (SUNAT BETA cert roto)
+def _ssl_verify():
+    if (settings.SUNAT_ENV or "beta").lower() == "produccion":
+        return ssl.create_default_context(cafile=certifi.where())
+    return False  # BETA: sin verificacion (revocation check roto del lado SUNAT)
 
 
 class SUNATClient:
@@ -48,7 +64,7 @@ class SUNATClient:
         soap = self._build_soap_envelope("sendBill", nombre_archivo + ".zip", zip_bytes)
         logger.info("SUNAT sendBill -> %s (%s, %s)", nombre_archivo, self.ambiente, self.url)
 
-        async with httpx.AsyncClient(timeout=_SUNAT_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_SUNAT_TIMEOUT, verify=_ssl_verify()) as client:
             response = await client.post(
                 self.url,
                 content=soap,
@@ -70,7 +86,7 @@ class SUNATClient:
         soap = self._build_soap_envelope("sendSummary", nombre_archivo + ".zip", zip_bytes)
         logger.info("SUNAT sendSummary -> %s", nombre_archivo)
 
-        async with httpx.AsyncClient(timeout=_SUNAT_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_SUNAT_TIMEOUT, verify=_ssl_verify()) as client:
             response = await client.post(
                 self.url, content=soap,
                 headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": ""},
@@ -82,7 +98,7 @@ class SUNATClient:
         """Consulta estado de un ticket (resumen/baja). Retorna (cod, desc, cdr_b64)."""
         soap = self._build_status_soap(ticket)
         logger.info("SUNAT getStatus -> ticket=%s", ticket)
-        async with httpx.AsyncClient(timeout=_SUNAT_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_SUNAT_TIMEOUT, verify=_ssl_verify()) as client:
             response = await client.post(
                 self.url, content=soap,
                 headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": ""},

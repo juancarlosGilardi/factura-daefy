@@ -20,6 +20,10 @@ qrcode[pil]>=7.4
 # MDB Access (requiere driver Access del cliente, ver docs/ARRANCAR.md)
 pyodbc>=5.0
 
+# DBF (Visual FoxPro / GECOPE) — modo dbf de Daefy
+dbf>=0.99
+dbfread>=2.0
+
 # Excel (export reportes)
 openpyxl>=3.1
 

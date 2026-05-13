@@ -41,14 +41,30 @@ class Settings:
         self.APP_NAME = "Factura-mdb"
         self.APP_VERSION = "0.1.0"
 
-        # MDB
+        # Modo de BD (mdb, dbf, sqlite)
         mdb_section = self._config.get("mdb") or {}
+        self.MDB_MODE: str = (
+            os.environ.get("FACTURA_MDB_MODE")
+            or mdb_section.get("mode")
+            or "mdb"
+        ).strip().lower()
+
+        # MDB
         mdb_path_raw = (
             os.environ.get("FACTURA_MDB_PATH")
             or mdb_section.get("path")
             or ""
         )
         self.MDB_PATH: Path = self._resolve_path(mdb_path_raw) if mdb_path_raw else Path("")
+
+        # DBF
+        dbf_section = self._config.get("dbf") or {}
+        dbf_path_raw = (
+            os.environ.get("FACTURA_DBF_PATH")
+            or dbf_section.get("path")
+            or ""
+        )
+        self.DBF_PATH: Path = self._resolve_path(dbf_path_raw) if dbf_path_raw else Path("")
 
         # Empresa
         self.EMPRESA: dict[str, Any] = self._config.get("empresa") or {}
@@ -175,3 +191,32 @@ def db_url() -> str:
     En Factura-mdb NO se usa SQLAlchemy/SQLite — devolvemos un URL de memoria.
     """
     return "sqlite:///:memory:"
+
+
+def save_config_json(config_dict: dict) -> None:
+    """Guarda un diccionario en config.json.
+    Mantiene la estructura existente y sobrescribe solo los campos proporcionados.
+    """
+    try:
+        # Cargar config existente o empezar con vacío
+        if CONFIG_PATH.exists():
+            current = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        else:
+            current = {}
+
+        # Actualizar con los nuevos valores (merge profundo por sección)
+        for key, value in config_dict.items():
+            if isinstance(value, dict) and key in current and isinstance(current[key], dict):
+                current[key].update(value)
+            else:
+                current[key] = value
+
+        # Guardar con formato legible
+        CONFIG_PATH.write_text(
+            json.dumps(current, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"No se pudo guardar config.json en {CONFIG_PATH}: {exc}"
+        ) from exc

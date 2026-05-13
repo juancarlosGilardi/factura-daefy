@@ -16,7 +16,7 @@ from ..services.excel_export import (
 )
 
 from ..core.database import get_db
-from ..core.db_adapter import is_mdb_mode
+from ..core.db_adapter import is_dbf_mode, is_mdb_mode
 from ..models.empresa import Configuracion
 from ..models.comprobante import Comprobante, ComprobanteDetalle
 from ..schemas.comprobante import (
@@ -76,8 +76,26 @@ def listar_comprobantes(
     fecha_hasta = fecha_hasta or hasta
     search = search or q_search
 
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
+        items, total = ComprobanteRepoDBF.listar(
+            filtros={
+                "tipo_documento": tipo_documento,
+                "serie": serie,
+                "estado": estado,
+                "fecha_desde": fecha_desde,
+                "fecha_hasta": fecha_hasta,
+                "cliente_id": cliente_id,
+                "q": (search or "").strip() or None,
+            },
+            limit=limit, offset=offset,
+        )
+        return ComprobanteListResponse(
+            items=items, total=total, limit=limit, offset=offset,
+        )
+
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_repo import ComprobanteRepoMDB
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
         items, total = ComprobanteRepoMDB.listar(
             filtros={
                 "tipo_documento": tipo_documento,
@@ -132,7 +150,7 @@ def proximo_correlativo(
 ):
     serie = serie.upper()
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_repo import ComprobanteRepoMDB
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
         d = ComprobanteRepoMDB.proximo_correlativo(serie, tipo_documento)
         return ProximoCorrelativoOut(**d)
     last = (db.query(func.max(Comprobante.correlativo))
@@ -177,7 +195,7 @@ def export_comprobantes_xlsx(
                      "B": "Anulado", "X": "Comunic. baja"}
 
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_repo import ComprobanteRepoMDB
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
         items_dict, _ = ComprobanteRepoMDB.listar(
             filtros={
                 "tipo_documento": tipo_documento,
@@ -289,7 +307,7 @@ def export_comprobantes_xlsx(
 @router.get("/{comp_id}", response_model=ComprobanteOut)
 def obtener_comprobante(comp_id: int, db: Session = Depends(get_db)):
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_repo import ComprobanteRepoMDB
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
         d = ComprobanteRepoMDB.obtener(comp_id)
         if d is None:
             raise HTTPException(status_code=404, detail="Comprobante no encontrado")
@@ -317,7 +335,7 @@ def emitir_comprobante(payload: ComprobanteIn, db: Session = Depends(get_db)):
     enviar a SUNAT. Devuelve estado 'P'.
     """
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_writer import ComprobanteWriterMDB
+        from ..core.db_adapter.repo import ComprobanteWriterMDB
         from ..core.db_adapter.mdb_lock import MDBLockTimeout
         # IGV default 18% (no leemos config del MDB porque el .mdb no la tiene)
         igv_rate = 18.0
@@ -477,8 +495,83 @@ def emitir_comprobante(payload: ComprobanteIn, db: Session = Depends(get_db)):
 def enviar_sunat(comp_id: int, db: Session = Depends(get_db)):
     """Fuerza envío a SUNAT (re-intento o primer envío manual)."""
     if is_mdb_mode():
-        # Sprint 3: implementar firma + envío SUNAT desde modo MDB
-        raise HTTPException(status_code=501, detail=_MDB_SUNAT_NOT_IMPL)
+        # Sprint 3 — firma + envío directo sobre dicts (MDB/SQLite).
+        from ..core.db_adapter.repo import (
+            ComprobanteRepoMDB, EmpresaRepoMDB, ComprobanteWriterMDB,
+        )
+        from ..core.db_adapter.mdb_lock import MDBLockTimeout
+        from ..services.comprobante_service import emitir_y_enviar_directo
+
+        comp = ComprobanteRepoMDB.obtener(comp_id)
+        if comp is None:
+            raise HTTPException(status_code=404,
+                                 detail="Comprobante no encontrado")
+        if comp.get("estado") == "A":
+            raise HTTPException(
+                status_code=409,
+                detail="El comprobante ya está aceptado por SUNAT",
+            )
+        if comp.get("estado") == "B":
+            raise HTTPException(
+                status_code=409,
+                detail="El comprobante está anulado, no puede reenviarse",
+            )
+
+        empresa = EmpresaRepoMDB.obtener()
+        detalles = comp.get("detalles") or []
+        if not detalles:
+            raise HTTPException(
+                status_code=422,
+                detail="El comprobante no tiene detalles que firmar",
+            )
+
+        try:
+            resultado = emitir_y_enviar_directo(
+                comp, empresa, detalles, generar_pdf=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Error envío SUNAT (modo directo)")
+            raise http_502_sunat(str(e))
+
+        # Persistir CDR/estado (incluso si falló, para registrar rechazo)
+        try:
+            ComprobanteWriterMDB.actualizar_cdr(
+                comp_id,
+                tipo=comp.get("tipo_documento"),
+                serie=comp.get("serie"),
+                correlativo=comp.get("correlativo"),
+                cdr_codigo=str(resultado.get("codigo") or ""),
+                cdr_descripcion=str(resultado.get("descripcion") or ""),
+                cdr_hash=str(resultado.get("cdr_hash") or ""),
+                estado=resultado.get("estado") or "R",
+                xml_path=resultado.get("xml_path"),
+                cdr_path=resultado.get("cdr_path"),
+                pdf_path=resultado.get("pdf_path"),
+            )
+        except MDBLockTimeout as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Error persistiendo CDR (continúo)")
+
+        # Si SUNAT rechazó, devolver 502 con detalle
+        if not resultado.get("success"):
+            err = resultado.get("error") or resultado.get("descripcion") or "SUNAT rechazó el comprobante"
+            codigo = resultado.get("codigo")
+            detalle = f"[{codigo}] {err}" if codigo else err
+            raise http_502_sunat(detalle)
+
+        # Releer y devolver
+        nuevo = ComprobanteRepoMDB.obtener(comp_id)
+        if nuevo is None:
+            raise HTTPException(status_code=500,
+                                 detail="No se pudo releer el comprobante")
+        # Inyectar paths del resultado (en MDB no se persisten en columnas
+        # estándar; F4CDR guarda solo la descripción)
+        nuevo["xml_path"] = resultado.get("xml_path")
+        nuevo["cdr_path"] = resultado.get("cdr_path")
+        nuevo["pdf_path"] = resultado.get("pdf_path")
+        return ComprobanteOut.model_validate(nuevo)
+
     comp = db.get(Comprobante, comp_id)
     if comp is None:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado")
@@ -525,9 +618,9 @@ def anular_local(comp_id: int, payload: AnularIn, db: Session = Depends(get_db))
     Para anular en SUNAT usa /api/comunicacion-baja.
     """
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_writer import ComprobanteWriterMDB
+        from ..core.db_adapter.repo import ComprobanteWriterMDB
         from ..core.db_adapter.mdb_lock import MDBLockTimeout
-        from ..core.db_adapter.mdb_repo import ComprobanteRepoMDB
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
         existing = ComprobanteRepoMDB.obtener(comp_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Comprobante no encontrado")
@@ -642,8 +735,6 @@ def descargar_pdf(comp_id: int, db: Session = Depends(get_db)):
 @router.post("/{comp_id}/reintentar", response_model=ComprobanteOut)
 def reintentar_envio(comp_id: int, db: Session = Depends(get_db)):
     """Alias de POST /{comp_id}/enviar-sunat."""
-    if is_mdb_mode():
-        raise HTTPException(status_code=501, detail=_MDB_SUNAT_NOT_IMPL)
     return enviar_sunat(comp_id, db)
 
 
@@ -661,6 +752,96 @@ def descargar_cdr_alias(comp_id: int, db: Session = Depends(get_db)):
 def descargar_pdf_alias(comp_id: int, inline: int = 0,
                          db: Session = Depends(get_db)):
     """Alias de /descargar/pdf con soporte ?inline=1 para iframe."""
+    if is_dbf_mode():
+        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
+        from ..core.config import storage_dir, settings
+        from ..services._dict_adapter import DictNS
+
+        comp_dict = ComprobanteRepoDBF.obtener(comp_id)
+        if comp_dict is None:
+            raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+
+        # Empresa desde config.json (no hay tabla empresa en DBF Daefy)
+        empresa = {
+            "ruc": settings.RUC or settings.EMPRESA.get("ruc", ""),
+            "razon_social": settings.EMPRESA.get("razon_social", ""),
+            "nombre_comercial": settings.EMPRESA.get("nombre_comercial", ""),
+            "direccion": settings.EMPRESA.get("direccion", ""),
+            "ubigeo": settings.EMPRESA.get("ubigeo", ""),
+            "departamento": settings.EMPRESA.get("departamento", ""),
+            "provincia": settings.EMPRESA.get("provincia", ""),
+            "distrito": settings.EMPRESA.get("distrito", ""),
+            "telefono": settings.EMPRESA.get("telefono"),
+            "email": settings.EMPRESA.get("email"),
+            "logo_path": settings.EMPRESA.get("logo_path"),
+        }
+
+        # Convención SUNAT: {RUC}-{TIPO}-{SERIE}-{CORRELATIVO_PADDED}.pdf
+        num_parts = (comp_dict.get("numero_completo") or "").split("-")
+        correl = num_parts[1] if len(num_parts) == 2 else f"{int(comp_dict.get('correlativo') or 0):08d}"
+        filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
+        pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
+
+        if not pdf_path.exists():
+            try:
+                from ..services.pdf_generator import generar_pdf_comprobante
+                comp_ns = DictNS(comp_dict)
+                emp_ns = DictNS(empresa)
+                det_list = [DictNS(d) for d in (comp_dict.get("detalles") or [])]
+                pdf_bytes = generar_pdf_comprobante(comp_ns, det_list, emp_ns, None)
+                pdf_path.parent.mkdir(parents=True, exist_ok=True)
+                pdf_path.write_bytes(pdf_bytes)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Error generando PDF modo DBF")
+                raise HTTPException(status_code=500, detail=f"No se pudo generar PDF: {e}")
+
+        headers = {}
+        if inline:
+            headers["Content-Disposition"] = f'inline; filename="{comp_dict.get("numero_completo")}.pdf"'
+        return FileResponse(path=str(pdf_path),
+                             filename=f"{comp_dict.get('numero_completo')}.pdf",
+                             media_type="application/pdf",
+                             headers=headers)
+
+    if is_mdb_mode():
+        from ..core.db_adapter.repo import ComprobanteRepoMDB, EmpresaRepoMDB
+        from ..core.config import storage_dir
+        from ..services._dict_adapter import DictNS
+
+        comp_dict = ComprobanteRepoMDB.obtener(comp_id)
+        if comp_dict is None:
+            raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+        empresa = EmpresaRepoMDB.obtener()
+
+        # Convención SUNAT: {RUC}-{TIPO}-{SERIE}-{CORRELATIVO_PADDED}.pdf
+        num_parts = (comp_dict.get("numero_completo") or "").split("-")
+        correl = num_parts[1] if len(num_parts) == 2 else f"{int(comp_dict.get('correlativo') or 0):08d}"
+        filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
+        pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
+
+        # Regenerar si no existe
+        if not pdf_path.exists():
+            try:
+                from ..services.pdf_generator import generar_pdf_comprobante
+                comp_ns = DictNS(comp_dict)
+                emp_ns = DictNS(empresa)
+                det_list = [DictNS(d) for d in (comp_dict.get("detalles") or [])]
+                pdf_bytes = generar_pdf_comprobante(comp_ns, det_list, emp_ns, None)
+                pdf_path.parent.mkdir(parents=True, exist_ok=True)
+                pdf_path.write_bytes(pdf_bytes)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Error generando PDF modo MDB")
+                raise HTTPException(status_code=500, detail=f"No se pudo generar PDF: {e}")
+
+        headers = {}
+        if inline:
+            headers["Content-Disposition"] = f'inline; filename="{comp_dict.get("numero_completo")}.pdf"'
+        return FileResponse(path=str(pdf_path),
+                             filename=f"{comp_dict.get('numero_completo')}.pdf",
+                             media_type="application/pdf",
+                             headers=headers)
+
+    # Flujo SQLAlchemy original
     comp = db.get(Comprobante, comp_id)
     if comp is None:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado")
@@ -689,6 +870,91 @@ def descargar_pdf_alias(comp_id: int, inline: int = 0,
                          headers=headers)
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Cotización y Pedido — PDFs internos generados desde un comprobante
+# existente. NO son documentos SUNAT, no se envían a SUNAT, no se persisten.
+# ─────────────────────────────────────────────────────────────────────────
+
+@router.get("/{comp_id}/cotizacion-pdf", summary="PDF de cotización (no SUNAT)")
+def descargar_cotizacion_pdf(
+    comp_id: int,
+    validez_dias: int = 15,
+    condicion_pago: str = "",
+    vendedor: str = "",
+    observaciones: str = "",
+    inline: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Genera PDF de COTIZACION reutilizando los items de un comprobante.
+    Útil para enviar propuesta al cliente antes de emitir factura.
+    """
+    from ..core.db_adapter.repo import ComprobanteRepoMDB, EmpresaRepoMDB
+    from ..services._dict_adapter import DictNS
+    from ..services.pdf_generator import generar_pdf_cotizacion
+    from fastapi.responses import Response
+
+    if not is_mdb_mode():
+        raise HTTPException(status_code=501, detail="Endpoint solo disponible en modo MDB/DBF/SQLite")
+    comp_dict = ComprobanteRepoMDB.obtener(comp_id)
+    if not comp_dict:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+    empresa = EmpresaRepoMDB.obtener()
+    detalles = [DictNS(d) for d in (comp_dict.get("detalles") or [])]
+    try:
+        pdf = generar_pdf_cotizacion(
+            DictNS(comp_dict), detalles, DictNS(empresa),
+            validez_dias=validez_dias,
+            condicion_pago=condicion_pago,
+            vendedor=vendedor,
+            observaciones=observaciones,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error generando PDF cotización")
+        raise HTTPException(status_code=500, detail=f"No se pudo generar PDF: {e}")
+    fname = f"COTIZACION-{comp_dict.get('numero_completo')}.pdf"
+    headers = {"Content-Disposition": f'{"inline" if inline else "attachment"}; filename="{fname}"'}
+    return Response(content=pdf, media_type="application/pdf", headers=headers)
+
+
+@router.get("/{comp_id}/pedido-pdf", summary="PDF de nota de pedido (no SUNAT)")
+def descargar_pedido_pdf(
+    comp_id: int,
+    condicion_pago: str = "",
+    vendedor: str = "",
+    observaciones: str = "",
+    inline: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Genera PDF de NOTA DE PEDIDO. Confirma un pedido del cliente antes
+    de emitir la factura. Mismo dataset que /cotizacion-pdf, distinto layout.
+    """
+    from ..core.db_adapter.repo import ComprobanteRepoMDB, EmpresaRepoMDB
+    from ..services._dict_adapter import DictNS
+    from ..services.pdf_generator import generar_pdf_pedido
+    from fastapi.responses import Response
+
+    if not is_mdb_mode():
+        raise HTTPException(status_code=501, detail="Endpoint solo disponible en modo MDB/DBF/SQLite")
+    comp_dict = ComprobanteRepoMDB.obtener(comp_id)
+    if not comp_dict:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+    empresa = EmpresaRepoMDB.obtener()
+    detalles = [DictNS(d) for d in (comp_dict.get("detalles") or [])]
+    try:
+        pdf = generar_pdf_pedido(
+            DictNS(comp_dict), detalles, DictNS(empresa),
+            condicion_pago=condicion_pago,
+            vendedor=vendedor,
+            observaciones=observaciones,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Error generando PDF pedido")
+        raise HTTPException(status_code=500, detail=f"No se pudo generar PDF: {e}")
+    fname = f"PEDIDO-{comp_dict.get('numero_completo')}.pdf"
+    headers = {"Content-Disposition": f'{"inline" if inline else "attachment"}; filename="{fname}"'}
+    return Response(content=pdf, media_type="application/pdf", headers=headers)
+
+
 # ---------- Catálogo de series (correlativos) ----------
 correlativos_router = APIRouter(prefix="/api/correlativos", tags=["correlativos"])
 
@@ -700,7 +966,7 @@ _SERIES_DEFAULT = ["F001", "B001", "FC01", "BC01", "FD01", "BD01"]
 def listar_series(db: Session = Depends(get_db)):
     """Devuelve series existentes en la BD + defaults para arrancar."""
     if is_mdb_mode():
-        from ..core.db_adapter.mdb_repo import ComprobanteRepoMDB
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
         items = ComprobanteRepoMDB.listar_series()
         existentes = {it["serie"] for it in items}
         for s in _SERIES_DEFAULT:
