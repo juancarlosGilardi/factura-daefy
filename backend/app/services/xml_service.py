@@ -81,7 +81,7 @@ def generar_y_firmar_resumen(
     xml_str = xml_to_string(xml_root)
 
     # SUNAT exige que la fecha del nombre del archivo == IssueDate (fecha_comunicacion)
-    fecha_str = req.fecha_comunicacion.replace("-", "")
+    fecha_str = req.fecha_documentos.replace("-", "")
     nombre = f"{req.ruc_emisor}-RC-{fecha_str}-{req.correlativo}"
     logger.info("XML resumen diario generado y firmado: %s", nombre)
     return xml_str, nombre
@@ -97,7 +97,7 @@ def generar_y_firmar_baja(
     firmar_desde_archivo(xml_root, cert_path, cert_password)
     xml_str = xml_to_string(xml_root)
 
-    fecha_str = req.fecha_comunicacion.replace("-", "")
+    fecha_str = req.fecha_documentos.replace("-", "")
     nombre = f"{req.ruc_emisor}-RA-{fecha_str}-{req.correlativo.zfill(5)}"
     logger.info("XML comunicacion de baja generado y firmado: %s", nombre)
     return xml_str, nombre

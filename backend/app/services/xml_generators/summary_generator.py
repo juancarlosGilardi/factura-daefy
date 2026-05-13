@@ -35,10 +35,10 @@ def generar_xml_resumen(req: ResumenDiarioRequest) -> etree._Element:
     _e(root, f"{{{CBC}}}CustomizationID", "1.1")
 
     # cbc:ID y Signature/ID deben usar la fecha del nombre del archivo (= fecha_comunicacion / IssueDate)
-    fecha_str = req.fecha_comunicacion.replace("-", "")
+    fecha_str = req.fecha_documentos.replace("-", "")
     _e(root, f"{{{CBC}}}ID", f"RC-{fecha_str}-{str(req.correlativo).zfill(3)}")
     _e(root, f"{{{CBC}}}ReferenceDate", req.fecha_documentos)
-    _e(root, f"{{{CBC}}}IssueDate", req.fecha_comunicacion)
+    _e(root, f"{{{CBC}}}IssueDate", req.fecha_documentos)
 
     sig = _e(root, f"{{{CAC}}}Signature")
     _e(sig, f"{{{CBC}}}ID", f"RC-{fecha_str}-{str(req.correlativo).zfill(3)}")
