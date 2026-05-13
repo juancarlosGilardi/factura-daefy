@@ -120,7 +120,16 @@ Type: files; Name: "{app}\config.example.json"
 var
   DbfPage: TInputDirWizardPage;
 
+// Devuelve el valor de /DBFPATH=... pasado por linea de comandos al
+// instalador (modo silencioso o GUI). Vacio si no se paso.
+function GetDbfPathParam(): string;
+begin
+  Result := ExpandConstant('{param:dbfpath|}');
+end;
+
 procedure InitializeWizard();
+var
+  CmdDbfPath: string;
 begin
   DbfPage := CreateInputDirPage(
     wpSelectDir,
@@ -135,7 +144,13 @@ begin
     ''
   );
   DbfPage.Add('Ruta a la carpeta de DBFs:');
-  DbfPage.Values[0] := 'C:\GECOPE\DATA';
+  // Si se paso /DBFPATH=... en la linea de comandos, ese valor manda y
+  // pre-rellena el wizard (en modo silencioso ni siquiera se ve).
+  CmdDbfPath := GetDbfPathParam();
+  if CmdDbfPath <> '' then
+    DbfPage.Values[0] := CmdDbfPath
+  else
+    DbfPage.Values[0] := 'C:\GECOPE\DATA';
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -290,10 +305,17 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   DbfDir: string;
+  CmdDbfPath: string;
 begin
   if CurStep = ssPostInstall then
   begin
-    DbfDir := DbfPage.Values[0];
+    // /DBFPATH=... siempre gana sobre el valor del wizard (es la unica
+    // forma confiable de configurar instalaciones silenciosas).
+    CmdDbfPath := GetDbfPathParam();
+    if CmdDbfPath <> '' then
+      DbfDir := CmdDbfPath
+    else
+      DbfDir := DbfPage.Values[0];
     WriteConfigJson(ExpandConstant('{app}'), DbfDir);
   end;
 end;

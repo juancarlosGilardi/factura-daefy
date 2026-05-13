@@ -129,6 +129,10 @@ hiddenimports += [
     "app.services.mdb_importer",
     "app.services.xml_generators",
     "app.services.xml_models",
+    # Importado dinamicamente desde comprobantes.py (4 lugares: PDF, XML,
+    # detalle, cotizacion). PyInstaller no lo detecta por el `from
+    # ..services._dict_adapter import DictNS` dentro de funciones.
+    "app.services._dict_adapter",
     "app.core.db_adapter.dbf_repo",
     "app.core.db_adapter.mdb_repo",
     "app.core.db_adapter.mdb_writer",
