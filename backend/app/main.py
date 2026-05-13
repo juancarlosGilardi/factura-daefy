@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -200,8 +200,19 @@ async def _security_headers(request: Request, call_next):
 # ---------------------------------------------------------------------------
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
+SPA_DIR = STATIC_DIR / "spa"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Frontend React SPA (FacturaPE-MultiEmpresa) compilado en static/spa.
+# Servimos /assets/* para JS/CSS y dejamos el catch-all al final del archivo
+# que devuelve index.html para todas las rutas no-API.
+if (SPA_DIR / "assets").is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(SPA_DIR / "assets")),
+        name="spa_assets",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -267,78 +278,15 @@ def _ctx(request: Request) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Páginas (SPA con templates Jinja + Alpine)
+# Páginas (Jinja heredadas) — DESACTIVADAS para que el SPA React tome control.
+# El catch-all al final del archivo sirve index.html para todas las rutas
+# no-API. Mantenemos las rutas heredadas comentadas como referencia.
 # ---------------------------------------------------------------------------
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    """Dashboard directo. No hay onboarding."""
-    ctx = _ctx(request)
-    ctx["licencia"] = {
-        "activada": True,
-        "ruc": ctx["empresa"].ruc,
-        "razon_social": ctx["empresa"].razon_social,
-        "nombre": "Factura-mdb",
-        "email": None,
-    }
-    return templates.TemplateResponse("dashboard.html", ctx)
-
-
-# Comprobantes
-@app.get("/comprobantes", response_class=HTMLResponse)
-def page_comprobantes(request: Request):
-    return templates.TemplateResponse("comprobantes/list.html", _ctx(request))
-
-
-@app.get("/comprobantes/emitir", response_class=HTMLResponse)
-def page_comprobantes_emitir(request: Request):
-    return templates.TemplateResponse("comprobantes/emitir.html", _ctx(request))
-
-
-@app.get("/comprobantes/{comprobante_id}", response_class=HTMLResponse)
-def page_comprobante_detail(request: Request, comprobante_id: int):
-    ctx = _ctx(request)
-    ctx["comprobante_id"] = comprobante_id
-    return templates.TemplateResponse("comprobantes/detail.html", ctx)
-
-
-# Clientes
-@app.get("/clientes", response_class=HTMLResponse)
-def page_clientes(request: Request):
-    return templates.TemplateResponse("clientes/list.html", _ctx(request))
-
-
-@app.get("/clientes/nuevo", response_class=HTMLResponse)
-def page_cliente_nuevo(request: Request):
-    ctx = _ctx(request)
-    ctx["cliente_id"] = None
-    return templates.TemplateResponse("clientes/form.html", ctx)
-
-
-@app.get("/clientes/{cliente_id}/editar", response_class=HTMLResponse)
-def page_cliente_editar(request: Request, cliente_id: int):
-    ctx = _ctx(request)
-    ctx["cliente_id"] = cliente_id
-    return templates.TemplateResponse("clientes/form.html", ctx)
-
-
-# Productos
-@app.get("/productos", response_class=HTMLResponse)
-def page_productos(request: Request):
-    return templates.TemplateResponse("productos/list.html", _ctx(request))
-
-
-@app.get("/productos/nuevo", response_class=HTMLResponse)
-def page_producto_nuevo(request: Request):
-    ctx = _ctx(request)
-    ctx["producto_id"] = None
-    return templates.TemplateResponse("productos/form.html", ctx)
-
-
-@app.get("/productos/{producto_id}/editar", response_class=HTMLResponse)
-def page_producto_editar(request: Request, producto_id: int):
-    ctx = _ctx(request)
-    ctx["producto_id"] = producto_id
-    return templates.TemplateResponse("productos/form.html", ctx)
+# @app.get("/", ...)              -> SPA React
+# @app.get("/comprobantes", ...)  -> SPA React
+# @app.get("/comprobantes/emitir", ...) -> SPA React (NuevaEmision.jsx)
+# @app.get("/clientes", ...)      -> SPA React
+# @app.get("/productos", ...)     -> SPA React
 
 
 # Comunicación de baja
@@ -382,10 +330,16 @@ from .api import (  # noqa: E402
     comprobantes,
     comunicacion_baja,
     empresas,
+    legacy_emision,
     productos,
     reportes,
     resumen_diario,
 )
+
+# Router legacy (compatibilidad con el SPA React de FacturaPE-MultiEmpresa).
+# Debe ir ANTES del catch-all del SPA y antes de comprobantes.router para
+# que /api/comprobantes/emitir matchee primero el shape antiguo.
+app.include_router(legacy_emision.router)
 
 app.include_router(empresas.router)
 app.include_router(empresas.plural_router)
@@ -397,3 +351,27 @@ app.include_router(comprobantes.correlativos_router)
 app.include_router(comunicacion_baja.router)
 app.include_router(resumen_diario.router)
 app.include_router(reportes.router)
+
+
+# ---------------------------------------------------------------------------
+# Catch-all del SPA — DEBE ir despues de todos los routers REST y de los
+# mounts de /assets, /static. Sirve index.html para cualquier ruta que NO
+# sea /api, /docs, /openapi, /static o /assets.
+# ---------------------------------------------------------------------------
+_SPA_INDEX = SPA_DIR / "index.html"
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_catch_all(full_path: str):
+    """Devuelve index.html para que React Router resuelva la ruta."""
+    excluded_prefixes = ("api/", "api", "docs", "openapi", "static/",
+                         "assets/", "redoc")
+    if any(full_path == p.rstrip("/") or full_path.startswith(p)
+           for p in excluded_prefixes):
+        raise HTTPException(status_code=404, detail="Not found")
+    if not _SPA_INDEX.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="SPA no disponible. Falta backend/app/static/spa/index.html",
+        )
+    return FileResponse(str(_SPA_INDEX), media_type="text/html")
