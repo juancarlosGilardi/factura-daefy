@@ -8,6 +8,7 @@ from sqlalchemy import func, and_, case
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
+from ..core.db_adapter import is_dbf_mode
 from ..models.comprobante import Comprobante
 from ..models.cliente import Cliente
 from ..models.producto import Producto
@@ -18,6 +19,113 @@ from ..services.excel_export import (
 logger = logging.getLogger("factura_mdb.api.reportes")
 
 router = APIRouter(prefix="/api/reportes", tags=["reportes"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers DBF — agregan sobre ventas.dbf cuando el modo activo es DBF.
+# Evitan crashes porque la sesión SQLAlchemy en este proyecto es un stub.
+# ---------------------------------------------------------------------------
+
+def _dbf_ventas_periodo(desde: _date, hasta: _date) -> dict:
+    """Calcula ventas en PEN agregadas por día para el período [desde, hasta].
+
+    Excluye comprobantes anulados (REGISTRO_A/DATA_BAJA) y filtra a los
+    tipos 01 (factura) y 03 (boleta).
+    """
+    from ..core.db_adapter.dbf_repo import _dbf  # type: ignore
+
+    dias_acum: dict[str, float] = {}
+    cantidad = 0
+    aceptados = 0
+    pendientes = 0
+    total = 0.0
+
+    for row in _dbf("ventas.dbf"):
+        # Tipo de documento — los DBF de GECOPE usan TIPO_DOCUM con códigos
+        # SUNAT ("01", "03", etc.). Si no está, lo deducimos por la serie.
+        tipo = (row.get("TIPO_DOCUM") or "").strip()
+        if not tipo:
+            ser = (row.get("SER_DOCUME") or "").strip().upper()
+            if ser.startswith("F"):
+                tipo = "01"
+            elif ser.startswith("B"):
+                tipo = "03"
+        if tipo not in ("01", "03"):
+            continue
+
+        fe = row.get("FECHA_EMIS")
+        if fe is None:
+            continue
+        try:
+            fe_str = fe.isoformat() if hasattr(fe, "isoformat") else str(fe)[:10]
+        except Exception:  # noqa: BLE001
+            continue
+        if fe_str < desde.isoformat() or fe_str > hasta.isoformat():
+            continue
+
+        anulado = bool(row.get("REGISTRO_A")) or bool(row.get("DATA_BAJA"))
+
+        try:
+            monto = float(row.get("TOTAL") or row.get("IMPORTE_TO") or 0.0)
+        except (TypeError, ValueError):
+            monto = 0.0
+
+        if not anulado:
+            dias_acum[fe_str] = dias_acum.get(fe_str, 0.0) + monto
+            total += monto
+            cantidad += 1
+            estado = (row.get("ESTADO_SUN") or row.get("ESTADO") or "").strip().upper()
+            if estado == "A":
+                aceptados += 1
+            elif estado in ("P", "R", ""):
+                pendientes += 1
+
+    dias = [{"fecha": d, "total": round(v, 2)} for d, v in sorted(dias_acum.items())]
+    return {
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "total": round(total, 2),
+        "cantidad": cantidad,
+        "aceptados": aceptados,
+        "pendientes": pendientes,
+        "dias": dias,
+    }
+
+
+def _dbf_resumen_dashboard() -> dict:
+    """Versión DBF del /resumen-dashboard."""
+    hoy = _date.today()
+    inicio_mes = _date(hoy.year, hoy.month, 1)
+
+    hoy_data = _dbf_ventas_periodo(hoy, hoy)
+    mes_data = _dbf_ventas_periodo(inicio_mes, hoy)
+
+    # Conteos absolutos de catálogo (clientes/productos) y pendientes SUNAT.
+    try:
+        from ..core.db_adapter.dbf_repo import (  # type: ignore
+            ClienteRepoDBF, ProductoRepoDBF,
+        )
+        total_clientes = len(ClienteRepoDBF._iter_all())
+        total_productos = len(ProductoRepoDBF._cargar_todos())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("conteo catálogo DBF falló: %s", exc)
+        total_clientes = 0
+        total_productos = 0
+
+    return {
+        "fecha": hoy.isoformat(),
+        "ventas_hoy": {
+            "total_pen": hoy_data["total"],
+            "cantidad": hoy_data["cantidad"],
+        },
+        "ventas_mes": {
+            "total_pen": mes_data["total"],
+            "cantidad": mes_data["cantidad"],
+        },
+        "pendientes_sunat": mes_data["pendientes"],
+        "total_clientes": total_clientes,
+        "total_productos": total_productos,
+    }
 
 
 def _xlsx_response(rows, headers, sheet_name: str, filename: str) -> Response:
@@ -140,6 +248,9 @@ def ventas_periodo(
     if not hasta:
         hasta = _date.today()
 
+    if is_dbf_mode():
+        return _dbf_ventas_periodo(desde, hasta)
+
     base_q = (
         db.query(Comprobante)
         .filter(Comprobante.fecha_emision >= desde)
@@ -185,6 +296,17 @@ def top_productos_periodo(
     db: Session = Depends(get_db),
 ):
     """Top productos por monto facturado en el período (en PEN)."""
+    if is_dbf_mode():
+        try:
+            from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
+            items = ComprobanteRepoDBF.top_productos(
+                desde=desde, hasta=hasta, limit=limit,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("top_productos DBF falló: %s", exc)
+            items = []
+        return {"items": items}
+
     from ..models.comprobante import ComprobanteDetalle  # local import (alias)
 
     q = (
@@ -229,6 +351,10 @@ def top_clientes_resumen(
     db: Session = Depends(get_db),
 ):
     """Wrapper de /top-clientes con shape `{items: [...]}` esperado por el frontend."""
+    if is_dbf_mode():
+        # No tenemos un agregado por cliente en el repo DBF — devolvemos vacío
+        # para que el dashboard renderice "sin datos" en vez de crashear.
+        return {"items": []}
     base = top_clientes(desde=desde, hasta=hasta, limit=limit, db=db)
     return {
         "items": [
@@ -243,6 +369,9 @@ def top_clientes_resumen(
 @router.get("/resumen-dashboard")
 def resumen_dashboard(db: Session = Depends(get_db)):
     """Combo para el dashboard: hoy, mes, pendientes, totales."""
+    if is_dbf_mode():
+        return _dbf_resumen_dashboard()
+
     hoy = _date.today()
     inicio_mes = _date(hoy.year, hoy.month, 1)
 

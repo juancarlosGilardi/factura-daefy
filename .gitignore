@@ -14,6 +14,7 @@ ENV/
 
 # Build
 build/
+build_nativo/
 dist/
 *.egg-info/
 *.spec.bak

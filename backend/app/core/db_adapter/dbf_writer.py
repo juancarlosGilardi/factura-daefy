@@ -191,7 +191,18 @@ class ComprobanteWriterDBF:
         # 1. Calcular CODIGO autoincremental + correlativo
         codigo_ventas = _next_codigo_ventas()
         correlativo = _next_correlativo(serie, tipo)
-        num_documento = f"{correlativo:08d}"
+        # Padding configurable: SUNAT estándar = 8, GECOPE/IDIVSA legacy = 7.
+        # Auto-detecta el ancho de los DBFs existentes (toma el último NUM_DOCUME).
+        try:
+            t_check = _open_table("ventas.dbf")
+            try:
+                widths = {len((r["NUM_DOCUME"] or "").strip()) for r in t_check if (r["NUM_DOCUME"] or "").strip().isdigit()}
+                pad = max(widths) if widths else 8
+            finally:
+                t_check.close()
+        except Exception:
+            pad = 8
+        num_documento = f"{correlativo:0{pad}d}"
 
         # 2. INSERT en ventas.dbf
         t = _open_table("ventas.dbf")

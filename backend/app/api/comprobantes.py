@@ -750,39 +750,28 @@ def descargar_cdr_alias(comp_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{comp_id}/pdf")
 def descargar_pdf_alias(comp_id: int, inline: int = 0,
+                         force: int = 0,
                          db: Session = Depends(get_db)):
-    """Alias de /descargar/pdf con soporte ?inline=1 para iframe."""
+    """Alias de /descargar/pdf con soporte ?inline=1 para iframe.
+
+    `force=1`: regenera el PDF aunque exista cacheado en storage/pdf/.
+    """
     if is_dbf_mode():
-        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
-        from ..core.config import storage_dir, settings
+        from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF, EmpresaRepoDBF
+        from ..core.config import storage_dir
         from ..services._dict_adapter import DictNS
 
         comp_dict = ComprobanteRepoDBF.obtener(comp_id)
         if comp_dict is None:
             raise HTTPException(status_code=404, detail="Comprobante no encontrado")
+        empresa = EmpresaRepoDBF.obtener()
 
-        # Empresa desde config.json (no hay tabla empresa en DBF Daefy)
-        empresa = {
-            "ruc": settings.RUC or settings.EMPRESA.get("ruc", ""),
-            "razon_social": settings.EMPRESA.get("razon_social", ""),
-            "nombre_comercial": settings.EMPRESA.get("nombre_comercial", ""),
-            "direccion": settings.EMPRESA.get("direccion", ""),
-            "ubigeo": settings.EMPRESA.get("ubigeo", ""),
-            "departamento": settings.EMPRESA.get("departamento", ""),
-            "provincia": settings.EMPRESA.get("provincia", ""),
-            "distrito": settings.EMPRESA.get("distrito", ""),
-            "telefono": settings.EMPRESA.get("telefono"),
-            "email": settings.EMPRESA.get("email"),
-            "logo_path": settings.EMPRESA.get("logo_path"),
-        }
-
-        # Convención SUNAT: {RUC}-{TIPO}-{SERIE}-{CORRELATIVO_PADDED}.pdf
         num_parts = (comp_dict.get("numero_completo") or "").split("-")
         correl = num_parts[1] if len(num_parts) == 2 else f"{int(comp_dict.get('correlativo') or 0):08d}"
         filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
         pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
 
-        if not pdf_path.exists():
+        if force or not pdf_path.exists():
             try:
                 from ..services.pdf_generator import generar_pdf_comprobante
                 comp_ns = DictNS(comp_dict)
@@ -819,8 +808,8 @@ def descargar_pdf_alias(comp_id: int, inline: int = 0,
         filename = f"{empresa.get('ruc')}-{comp_dict.get('tipo_documento')}-{comp_dict.get('serie')}-{correl}"
         pdf_path = storage_dir() / "pdf" / f"{filename}.pdf"
 
-        # Regenerar si no existe
-        if not pdf_path.exists():
+        # Regenerar si no existe (o si force=1)
+        if force or not pdf_path.exists():
             try:
                 from ..services.pdf_generator import generar_pdf_comprobante
                 comp_ns = DictNS(comp_dict)

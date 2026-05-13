@@ -466,3 +466,123 @@ def productos_slash_alias(
         db=None, search=None, q_search=q, activo=None,
         limit=limit, offset=offset,
     )
+
+
+# ---------------------------------------------------------------------------
+# Stubs adicionales para evitar 404/500 en el dashboard y configuración
+# ---------------------------------------------------------------------------
+
+# Dashboard.jsx llama /api/tipos-cambio/hoy (plural). Mantenemos el alias
+# singular existente y agregamos el plural para que ambos formatos sirvan.
+@router.get("/api/tipos-cambio/hoy")
+def tipos_cambio_hoy_stub(moneda: str = "USD") -> dict:
+    """Tipo de cambio del día (alias plural). Stub con valor estático."""
+    return {
+        "moneda": moneda,
+        "compra": 3.75,
+        "venta": 3.78,
+        "fecha": _date.today().isoformat(),
+    }
+
+
+# Dashboard.jsx llama /api/envios/email/resumen para mostrar el contador
+# de correos enviados. No tenemos servicio real aún; devolvemos vacío.
+@router.get("/api/envios/email/resumen")
+def envios_email_resumen_stub() -> dict:
+    """Resumen de envíos por email (stub). Sin envíos automáticos hoy."""
+    return {
+        "hoy": {"enviados": 0, "fallidos": 0},
+        "mes": {"enviados": 0, "fallidos": 0},
+        "ultimos": [],
+    }
+
+
+# El endpoint real /api/comprobantes/{comp_id} captura "robot-status" como
+# entero y devuelve 422. Definimos el estado del robot SUNAT acá ANTES de
+# que se monte el router de comprobantes.
+@router.get("/api/comprobantes/robot-status")
+def comprobantes_robot_status_stub() -> dict:
+    """Estado del robot que envía a SUNAT en background. Sin robot por ahora."""
+    return {
+        "activo": False,
+        "ultima_corrida": None,
+        "pendientes": 0,
+        "mensaje": "Envío manual desde la UI (robot deshabilitado)",
+    }
+
+
+# Configuracion.jsx llama /api/config/ — alias plano que devuelve el
+# mismo shape que /api/empresa/configuracion (frontend lo usa para
+# leer flags globales).
+@router.get("/api/config/")
+def config_root_stub() -> dict:
+    """Alias plano /api/config/ usado por Configuracion.jsx."""
+    try:
+        from ..main import _FAKE_CONFIG_MDB
+
+        return {
+            "id": _FAKE_CONFIG_MDB.id,
+            "igv_rate": _FAKE_CONFIG_MDB.igv_rate,
+            "formato_impresion": _FAKE_CONFIG_MDB.formato_impresion,
+            "moneda_default": _FAKE_CONFIG_MDB.moneda_default,
+            "aplica_detraccion": _FAKE_CONFIG_MDB.aplica_detraccion,
+            "detraccion_porcentaje": _FAKE_CONFIG_MDB.detraccion_porcentaje,
+            "auto_envio_sunat": _FAKE_CONFIG_MDB.auto_envio_sunat,
+            "backup_automatico": _FAKE_CONFIG_MDB.backup_automatico,
+            "pie_pagina": _FAKE_CONFIG_MDB.pie_pagina,
+            "cuenta_bcp": _FAKE_CONFIG_MDB.cuenta_bcp,
+            "cuenta_bcp_moneda": _FAKE_CONFIG_MDB.cuenta_bcp_moneda,
+            "cta_banco_nacion": _FAKE_CONFIG_MDB.cta_banco_nacion,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("config_root_stub fallback: %s", exc)
+        return {
+            "id": 1, "igv_rate": 18.0, "formato_impresion": "A4",
+            "moneda_default": "PEN", "aplica_detraccion": False,
+            "detraccion_porcentaje": 0.0, "auto_envio_sunat": False,
+            "backup_automatico": False,
+        }
+
+
+# /api/correlativos cae al `db.query()` stub en modo DBF (RuntimeError 500).
+# Definimos acá el handler que va a ganar (legacy_emision se incluye antes
+# que comprobantes.correlativos_router).
+_SERIES_DEFAULT_LEGACY = ["F001", "B001", "FC01", "BC01", "FD01", "BD01"]
+
+
+@router.get("/api/correlativos")
+def correlativos_dbf_safe() -> dict:
+    """Devuelve series y último correlativo. Soporta modo DBF sin sesión SQL."""
+    if is_dbf_mode():
+        try:
+            from ..core.db_adapter.dbf_repo import ComprobanteRepoDBF
+
+            items = ComprobanteRepoDBF.listar_series()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("correlativos DBF fallback: %s", exc)
+            items = []
+        existentes = {it["serie"] for it in items}
+        for s in _SERIES_DEFAULT_LEGACY:
+            if s not in existentes:
+                items.append({"serie": s, "ultimo": 0})
+        items.sort(key=lambda x: x["serie"])
+        return {"items": items}
+
+    # Modos no-DBF: devolvemos defaults (el comprobantes.correlativos_router
+    # original se intentará usar para SQLite/MDB y caerá si la BD falla).
+    return {"items": [{"serie": s, "ultimo": 0} for s in _SERIES_DEFAULT_LEGACY]}
+
+
+# /api/empresa (sin barra) cae al else con db.query → 500 en DBF.
+# `/api/empresa/` (con barra) ya tiene handler arriba; agregamos sin barra.
+@router.get("/api/empresa")
+def empresa_legacy_sin_slash() -> dict:
+    """Variante sin barra final — el frontend a veces la pide así."""
+    return empresa_legacy()
+
+
+# /api/configuracion también cae al db.query stub en DBF.
+@router.get("/api/configuracion")
+def configuracion_dbf_safe() -> dict:
+    """Configuración global. En DBF devuelve los valores del config.json."""
+    return config_root_stub()
