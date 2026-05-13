@@ -34,7 +34,8 @@ def generar_xml_resumen(req: ResumenDiarioRequest) -> etree._Element:
     _e(root, f"{{{CBC}}}UBLVersionID", "2.0")
     _e(root, f"{{{CBC}}}CustomizationID", "1.1")
 
-    fecha_str = req.fecha_documentos.replace("-", "")
+    # cbc:ID y Signature/ID deben usar la fecha del nombre del archivo (= fecha_comunicacion / IssueDate)
+    fecha_str = req.fecha_comunicacion.replace("-", "")
     _e(root, f"{{{CBC}}}ID", f"RC-{fecha_str}-{str(req.correlativo).zfill(3)}")
     _e(root, f"{{{CBC}}}ReferenceDate", req.fecha_documentos)
     _e(root, f"{{{CBC}}}IssueDate", req.fecha_comunicacion)
@@ -82,7 +83,8 @@ def _agregar_linea(root, doc: DocumentoResumen, line_id: int):
     status = _e(line, f"{{{CAC}}}Status")
     _e(status, f"{{{CBC}}}ConditionCode", doc.condicion)
 
-    if doc.condicion != "3":
+    # SUNAT XSD: TotalAmount + BillingPayment + tax totals SIEMPRE requeridos
+    if True:
         _e(line, f"{{{SAC}}}TotalAmount", f"{doc.total:.2f}",
            attrib={"currencyID": doc.moneda})
 

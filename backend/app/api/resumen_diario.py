@@ -1,15 +1,21 @@
-"""Endpoints de Resumen Diario (RC)."""
+"""Endpoints de Resumen Diario (RC).
+
+Soporta dos modos:
+  - SQLAlchemy (legacy): tabla `resumenes_diarios` + comprobantes ORM.
+  - MDB/SQLite (Factura-mdb productivo): FMDB_RESUMENES + TBVENTA_CAB via
+    ResumenStore + ComprobanteRepoMDB. El dispatch se hace con `is_mdb_mode()`.
+"""
 import logging
 from datetime import date as _date
 from typing import Optional, List
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy import func, and_, or_, not_, exists
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
-from ..core.db_adapter import is_dbf_mode
+from ..core.db_adapter import is_mdb_mode
 from ..models.comprobante import Comprobante
 from ..models.resumen import (
     ResumenDiario, ResumenDiarioItem, ComunicacionBaja, ComunicacionBajaItem,
@@ -36,6 +42,9 @@ def _serializar_resumen(r: ResumenDiario, items: list) -> ResumenDiarioOut:
     })
 
 
+# =====================================================================
+# GET / — listar
+# =====================================================================
 @router.get("", response_model=ResumenListResponse)
 def listar_resumenes(
     db: Session = Depends(get_db),
@@ -43,6 +52,14 @@ def listar_resumenes(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
+    if is_mdb_mode():
+        from ..core.db_adapter.resumen_store import ResumenStore
+        items_dict, total = ResumenStore.listar(
+            estado=estado, limit=limit, offset=offset,
+        )
+        out = [ResumenDiarioOut.model_validate(r) for r in items_dict]
+        return ResumenListResponse(items=out, total=total, limit=limit, offset=offset)
+
     q = db.query(ResumenDiario)
     if estado:
         q = q.filter(ResumenDiario.estado == estado)
@@ -59,12 +76,71 @@ def listar_resumenes(
     return ResumenListResponse(items=out, total=total, limit=limit, offset=offset)
 
 
+# =====================================================================
+# GET /comprobantes-pendientes
+# =====================================================================
 @router.get("/comprobantes-pendientes", response_model=List[ComprobantePendienteResumen])
 def comprobantes_pendientes(
     fecha: _date = Query(..., description="Fecha de emisión a consultar"),
     db: Session = Depends(get_db),
 ):
-    """Boletas (03) emitidas en `fecha` que aún no están en un resumen ni en una baja."""
+    """Boletas (03) y NCs/NDs de boleta (07/08) emitidas en `fecha`
+    que aún no están en un resumen ni en una baja."""
+    if is_mdb_mode():
+        from ..core.db_adapter.repo import ComprobanteRepoMDB
+        from ..core.db_adapter.resumen_store import ResumenStore
+        from ..core.db_adapter.baja_store import BajaStore
+
+        # Usar listar con cap amplio y filtrar por fecha exacta + tipo
+        # Nota: no usamos fecha_hasta porque F4FECEMI puede venir con hora
+        # ("2026-05-06 00:00:00") y la comparacion lexicografica TEXT > date
+        # excluye filas validas. Filtramos por fecha exacta en Python.
+        candidatos: list[dict] = []
+        for tipo in ("03", "07", "08"):
+            items, _ = ComprobanteRepoMDB.listar(
+                filtros={"tipo_documento": tipo, "fecha_desde": fecha},
+                limit=500, offset=0,
+            )
+            for c in items:
+                if c.get("fecha_emision") == fecha:
+                    candidatos.append(c)
+
+        # Excluir los ya incluidos en un resumen activo o en una baja
+        ya_resumen = ResumenStore.comprobante_ids_en_resumen_activo()
+        ya_baja: set[int] = set()
+        try:
+            bajas, _ = BajaStore.listar(limit=500, offset=0)
+            for b in bajas:
+                if b.get("estado") in ("B",):
+                    continue
+                for it in b.get("_items_raw") or []:
+                    cid = it.get("comprobante_id")
+                    if cid:
+                        try:
+                            ya_baja.add(int(cid))
+                        except (TypeError, ValueError):
+                            pass
+        except Exception as e:  # noqa: BLE001
+            logger.debug("No se pudo cargar bajas para excluir: %s", e)
+
+        out: list[ComprobantePendienteResumen] = []
+        for c in candidatos:
+            cid = int(c.get("id") or 0)
+            if cid in ya_resumen or cid in ya_baja:
+                continue
+            out.append(ComprobantePendienteResumen(
+                id=cid,
+                numero_completo=c.get("numero_completo") or "",
+                fecha_emision=c.get("fecha_emision"),
+                cliente_numero_doc=c.get("cliente_numero_doc") or "",
+                cliente_razon_social=c.get("cliente_razon_social") or "",
+                moneda=c.get("moneda") or "PEN",
+                total_venta=float(c.get("total_venta") or 0),
+                estado=c.get("estado") or "P",
+            ))
+        out.sort(key=lambda x: (x.numero_completo or ""))
+        return out
+
     incluidas_en_resumen = db.query(ResumenDiarioItem.comprobante_id).subquery()
     incluidas_en_baja = db.query(ComunicacionBajaItem.comprobante_id).subquery()
 
@@ -92,9 +168,125 @@ def comprobantes_pendientes(
     ]
 
 
+# =====================================================================
+# POST / — crear y enviar
+# =====================================================================
 @router.post("", response_model=ResumenDiarioOut, status_code=201)
 def crear_resumen(payload: ResumenDiarioIn, db: Session = Depends(get_db)):
     """Crea y envía un resumen diario."""
+    if is_mdb_mode():
+        from ..core.db_adapter.repo import ComprobanteRepoMDB, EmpresaRepoMDB
+        from ..core.db_adapter.resumen_store import ResumenStore
+        from ..services.resumen_service import enviar_resumen_directo
+
+        # Resolver y validar comprobantes
+        comp_ids = [it.comprobante_id for it in payload.items]
+        condicion_por_id = {it.comprobante_id: it.condicion for it in payload.items}
+        encontrados: dict[int, dict] = {}
+        for cid in comp_ids:
+            comp = ComprobanteRepoMDB.obtener(cid)
+            if comp is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Comprobante id={cid} no encontrado",
+                )
+            encontrados[cid] = comp
+
+        # fecha_referencia debe coincidir con fecha_emision
+        fuera = [
+            encontrados[cid].get("numero_completo")
+            for cid in comp_ids
+            if encontrados[cid].get("fecha_emision") != payload.fecha_referencia
+        ]
+        if fuera:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Estos comprobantes no son del {payload.fecha_referencia}: {fuera}",
+            )
+
+        # Evitar duplicados en otro resumen activo
+        ya_set = ResumenStore.comprobante_ids_en_resumen_activo()
+        en_otro = [cid for cid in comp_ids if cid in ya_set]
+        if en_otro:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Comprobantes ya están en otro resumen: {sorted(en_otro)}",
+            )
+
+        fecha_com = payload.fecha_comunicacion or _date.today()
+        correlativo = ResumenStore.proximo_correlativo(fecha_com)
+
+        empresa = EmpresaRepoMDB.obtener()
+        ruc = empresa.get("ruc") or "00000000000"
+        nombre_archivo = f"{ruc}-RC-{fecha_com.strftime('%Y%m%d')}-{correlativo:03d}"
+
+        total_gravado = sum(float(encontrados[cid].get("total_gravado") or 0) for cid in comp_ids)
+        total_igv = sum(float(encontrados[cid].get("total_igv") or 0) for cid in comp_ids)
+        total = sum(float(encontrados[cid].get("total_venta") or 0) for cid in comp_ids)
+
+        # items_json compactos: lo necesario para reconstruir y para getStatus
+        items_persist: list[dict] = []
+        for cid in comp_ids:
+            c = encontrados[cid]
+            items_persist.append({
+                "comprobante_id": cid,
+                "condicion": condicion_por_id.get(cid, "1"),
+                "tipo_documento": c.get("tipo_documento"),
+                "serie": c.get("serie"),
+                "correlativo": c.get("correlativo"),
+                "numero_completo": c.get("numero_completo"),
+                "total_venta": float(c.get("total_venta") or 0),
+            })
+
+        resumen_id = ResumenStore.crear(
+            fecha_referencia=payload.fecha_referencia,
+            fecha_comunicacion=fecha_com,
+            correlativo=correlativo,
+            nombre_archivo=nombre_archivo,
+            items=items_persist,
+            total_documentos=len(comp_ids),
+            total_gravado=total_gravado,
+            total_igv=total_igv,
+            total=total,
+        )
+
+        # Construir comprobantes-dict para mapper (con condicion inyectada)
+        comps_para_mapper: list[dict] = []
+        for cid in comp_ids:
+            c = dict(encontrados[cid])
+            c["__condicion"] = condicion_por_id.get(cid, "1")
+            comps_para_mapper.append(c)
+
+        resumen_dict = {
+            "correlativo": correlativo,
+            "fecha_referencia": payload.fecha_referencia,
+            "fecha_comunicacion": fecha_com,
+            "nombre_archivo": nombre_archivo,
+        }
+
+        try:
+            resultado = enviar_resumen_directo(resumen_dict, empresa, comps_para_mapper)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Error envío resumen SUNAT (directo)")
+            raise http_502_sunat(str(e))
+
+        ResumenStore.actualizar(
+            resumen_id,
+            estado=resultado.get("estado") or ("P" if resultado.get("success") else "R"),
+            ticket=resultado.get("ticket"),
+            xml_path=resultado.get("xml_path"),
+            nombre_archivo=resultado.get("nombre_archivo") or nombre_archivo,
+            cdr_descripcion=(resultado.get("error") if not resultado.get("success") else None),
+        )
+
+        if not resultado.get("success"):
+            err = resultado.get("error") or "SUNAT rechazó el resumen"
+            raise http_502_sunat(err)
+
+        out = ResumenStore.obtener(resumen_id)
+        return ResumenDiarioOut.model_validate(out)
+
+    # ----- Fallback SQLAlchemy (legacy) -----
     comp_ids = [it.comprobante_id for it in payload.items]
     comprobantes = db.query(Comprobante).filter(Comprobante.id.in_(comp_ids)).all()
     encontrados = {c.id: c for c in comprobantes}
@@ -107,7 +299,6 @@ def crear_resumen(payload: ResumenDiarioIn, db: Session = Depends(get_db)):
 
     fecha_com = payload.fecha_comunicacion or _date.today()
 
-    # Validar que los comprobantes coincidan con la fecha_referencia
     fuera = [
         encontrados[cid].numero_completo
         for cid in comp_ids
@@ -119,7 +310,6 @@ def crear_resumen(payload: ResumenDiarioIn, db: Session = Depends(get_db)):
             detail=f"Estos comprobantes no son del {payload.fecha_referencia}: {fuera}",
         )
 
-    # Bug D6: evitar incluir comprobantes que ya están en otro resumen activo.
     ya_incluidos = (
         db.query(ResumenDiarioItem.comprobante_id)
         .join(ResumenDiario, ResumenDiario.id == ResumenDiarioItem.resumen_id)
@@ -143,7 +333,6 @@ def crear_resumen(payload: ResumenDiarioIn, db: Session = Depends(get_db)):
     ruc = empresa.ruc if empresa else "00000000000"
     nombre_archivo = f"{ruc}-RC-{fecha_com.strftime('%Y%m%d')}-{correlativo:03d}"
 
-    # Bug C7/F9: tolerar None en columnas para no explotar con TypeError
     total_gravado = sum((c.total_gravado or 0) for c in comprobantes)
     total_igv = sum((c.total_igv or 0) for c in comprobantes)
     total = sum((c.total_venta or 0) for c in comprobantes)
@@ -188,8 +377,18 @@ def crear_resumen(payload: ResumenDiarioIn, db: Session = Depends(get_db)):
     return _serializar_resumen(resumen, items)
 
 
+# =====================================================================
+# GET /{id}
+# =====================================================================
 @router.get("/{resumen_id}", response_model=ResumenDiarioOut)
 def obtener_resumen(resumen_id: int, db: Session = Depends(get_db)):
+    if is_mdb_mode():
+        from ..core.db_adapter.resumen_store import ResumenStore
+        d = ResumenStore.obtener(resumen_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="Resumen no encontrado")
+        return ResumenDiarioOut.model_validate(d)
+
     r = db.get(ResumenDiario, resumen_id)
     if r is None:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
@@ -198,8 +397,64 @@ def obtener_resumen(resumen_id: int, db: Session = Depends(get_db)):
     return _serializar_resumen(r, items)
 
 
+# =====================================================================
+# GET /{id}/consultar-ticket
+# =====================================================================
 @router.get("/{resumen_id}/consultar-ticket", response_model=TicketConsultaOut)
 def consultar_ticket_resumen(resumen_id: int, db: Session = Depends(get_db)):
+    if is_mdb_mode():
+        from ..core.db_adapter.resumen_store import ResumenStore
+        from ..core.db_adapter.repo import EmpresaRepoMDB, ComprobanteWriterMDB
+        from ..services.resumen_service import consultar_ticket_directo
+
+        d = ResumenStore.obtener(resumen_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="Resumen no encontrado")
+        if not d.get("ticket"):
+            raise HTTPException(status_code=409,
+                                 detail="Este resumen aún no tiene ticket SUNAT")
+
+        empresa = EmpresaRepoMDB.obtener()
+        try:
+            res = consultar_ticket_directo(
+                empresa, d["ticket"], d.get("nombre_archivo") or "",
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Error consultando ticket resumen (directo)")
+            raise http_502_sunat(str(e))
+
+        ResumenStore.actualizar(
+            resumen_id,
+            estado=res.get("estado") or "P",
+            cdr_codigo=res.get("codigo"),
+            cdr_descripcion=res.get("descripcion"),
+            cdr_path=res.get("cdr_path"),
+        )
+
+        # Si aceptado, marcar comprobantes con condicion='3' como dados de baja
+        if res.get("success"):
+            for it in d.get("_items_raw") or []:
+                if str(it.get("condicion") or "1") != "3":
+                    continue
+                cid = it.get("comprobante_id")
+                if not cid:
+                    continue
+                try:
+                    ComprobanteWriterMDB.anular(
+                        int(cid),
+                        f"[Resumen RC condicion=3] {d.get('nombre_archivo', '')}"[:200],
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("No se pudo anular comp=%s: %s", cid, e)
+
+        return TicketConsultaOut(
+            ticket=d["ticket"],
+            estado=res.get("estado") or d.get("estado"),
+            cdr_codigo=res.get("codigo"),
+            cdr_descripcion=res.get("descripcion"),
+            cdr_path=res.get("cdr_path"),
+        )
+
     r = db.get(ResumenDiario, resumen_id)
     if r is None:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
@@ -226,7 +481,7 @@ def consultar_ticket_resumen(resumen_id: int, db: Session = Depends(get_db)):
     )
 
 
-# ---------- Aliases para el frontend (Agente C) ----------
+# ---------- Aliases para el frontend ----------
 @router.get("/{resumen_id}/consultar", response_model=TicketConsultaOut)
 def consultar_alias_resumen(resumen_id: int, db: Session = Depends(get_db)):
     return consultar_ticket_resumen(resumen_id, db)
@@ -234,6 +489,22 @@ def consultar_alias_resumen(resumen_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{resumen_id}/cdr")
 def descargar_cdr_resumen(resumen_id: int, db: Session = Depends(get_db)):
+    if is_mdb_mode():
+        from ..core.db_adapter.resumen_store import ResumenStore
+        d = ResumenStore.obtener(resumen_id)
+        if d is None:
+            raise HTTPException(status_code=404, detail="Resumen no encontrado")
+        cdr_path = d.get("cdr_path")
+        if not cdr_path:
+            raise HTTPException(status_code=404,
+                                 detail="Aún no hay CDR para este resumen")
+        p = Path(cdr_path)
+        if not p.exists():
+            raise HTTPException(status_code=404,
+                                 detail=f"Archivo no encontrado: {p.name}")
+        return FileResponse(path=str(p), filename=p.name,
+                             media_type="application/zip")
+
     r = db.get(ResumenDiario, resumen_id)
     if r is None:
         raise HTTPException(status_code=404, detail="Resumen no encontrado")
