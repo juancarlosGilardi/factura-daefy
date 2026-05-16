@@ -355,6 +355,7 @@ from .api import (  # noqa: E402
     clientes,
     comprobantes,
     comunicacion_baja,
+    cotizaciones_pedidos,
     email_envio,
     empresas,
     flujo_emision,
