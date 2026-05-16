@@ -154,7 +154,24 @@ async def lifespan(_app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.exception("No se pudo abrir la BD: %s", exc)
         # No raise: dejamos arrancar para que la UI muestre el error.
+
+    # Robot SUNAT: solo en modo DBF (DAEFY). Reintenta cada 60s los comp en T.
+    try:
+        if is_dbf_mode():
+            from .services.robot_sunat import iniciar_robot
+            iniciar_robot()
+            logger.info("Robot SUNAT lanzado (modo DBF)")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("No se pudo iniciar robot SUNAT: %s", exc)
+
     yield
+
+    # Shutdown ordenado del robot
+    try:
+        from .services.robot_sunat import detener_robot
+        await detener_robot()
+    except Exception:
+        pass
     logger.info("Factura-mdb cerrado")
 
 
@@ -340,6 +357,7 @@ from .api import (  # noqa: E402
     comunicacion_baja,
     email_envio,
     empresas,
+    flujo_emision,
     importar,
     legacy_emision,
     productos,
@@ -351,6 +369,11 @@ from .api import (  # noqa: E402
 # Debe ir ANTES del catch-all del SPA y antes de comprobantes.router para
 # que /api/comprobantes/emitir matchee primero el shape antiguo.
 app.include_router(legacy_emision.router)
+
+# Router del flujo de emision en 2 pasos (DAEFY). Tambien debe ir ANTES
+# de comprobantes.router para que /api/comprobantes/{id}/enviar-sunat
+# matchee primero la implementacion DBF (modo DAEFY) y no la SQLAlchemy.
+app.include_router(flujo_emision.router)
 
 app.include_router(empresas.router)
 app.include_router(empresas.plural_router)

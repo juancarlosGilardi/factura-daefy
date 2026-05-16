@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date as _date, datetime
-from typing import Any
+from typing import Any, Optional
 
 import dbf as _dbflib
 
@@ -257,6 +257,8 @@ class ComprobanteWriterDBF:
             _put("REPAGA_SOL", 0.0)
             _put("VUELTO_SOL", 0.0)
             _put("EXPORTACIO", tipo_operacion in ("0200", "0201", "0202", "0203", "0204"))
+            # Estado inicial = E (Emitido local, NO enviado).
+            # Flags DBF que mapean: DATA/FIRMA/RPTA/CODIGO_HAS = false → E.
             _put("DATA", False)        # firmado XML
             _put("FIRMA", False)       # firmado
             _put("RPTA", False)        # SUNAT respondio
@@ -265,7 +267,7 @@ class ComprobanteWriterDBF:
             _put("DATA_BAJA", False)
             _put("FIRMA_BAJA", False)
             _put("RPTA_BAJA", False)
-            _put("REGISTRO_A", False)
+            _put("REGISTRO_A", False)  # No anulado/baja
             _put("TIPO_NOTA_", str(payload.get("motivo_codigo") or payload.get("doc_referencia_motivo") or "")[:2])
             _put("TIPO_NOTA2", "")
             _put("TIPO_OPERA", tipo_operacion)
@@ -402,6 +404,14 @@ class ComprobanteWriterDBF:
         except Exception:
             pass
 
+        # Invalidar cache para que el listar refleje el nuevo
+        try:
+            from .dbf_repo import invalidate_cache
+            invalidate_cache("comprobantes_cab")
+            invalidate_cache("ventas_meta")
+        except Exception:
+            pass
+
         # ID sintetico para responder
         from .mdb_repo import _synth_id
         sid = _synth_id("comp_dbf", tipo, serie, correlativo)
@@ -449,7 +459,7 @@ class ComprobanteWriterDBF:
             "doc_referencia_motivo": payload.get("doc_referencia_motivo"),
             "motivo_nc_codigo": payload.get("motivo_codigo") or payload.get("motivo_nc_codigo"),
             "motivo_nc_descripcion": payload.get("motivo_descripcion"),
-            "estado": "P",  # Pendiente envio SUNAT
+            "estado": "E",  # Emitido localmente, NO enviado a SUNAT
             "cdr_codigo": None,
             "cdr_descripcion": None,
             "xml_path": None,
@@ -486,3 +496,179 @@ class ComprobanteWriterDBF:
                 for idx, item in enumerate(items, start=1)
             ],
         }
+
+    # -----------------------------------------------------------------
+    # Helpers de UPDATE de estado para el flujo en 2 pasos (E/A/T/R/B).
+    # En GECOPE no existe un campo "estado" explicito; mapeamos:
+    #   E (Emitido local)        → DATA=False, RPTA=False, REGISTRO_A=False
+    #   A (Aceptado SUNAT)       → DATA=True, FIRMA=True, RPTA=True,
+    #                              CODIGO_HAS=<cdr_hash>, MOTIVO_BAJ vacio
+    #   T (Timeout SUNAT)        → DATA=True, FIRMA=True, RPTA=False,
+    #                              MOTIVO_BAJ="[T] reintenta SUNAT"
+    #   R (Rechazado por SUNAT)  → DATA=True, FIRMA=True, RPTA=True,
+    #                              MOTIVO_BAJ="[R] <descripcion>",
+    #                              CODIGO_HAS vacio
+    #   B (Anulado/Baja)         → REGISTRO_A=True, MOTIVO_BAJ="<motivo>"
+    # El reader (`dbf_repo._decidir_estado_gecope`) traduce esto a E/A/T/R/B.
+    # -----------------------------------------------------------------
+
+    @staticmethod
+    def _find_row(serie: str, correlativo: int, tipo_documento: str) -> tuple[Any, Any]:
+        """Localiza un registro en ventas.dbf por (serie, correlativo, tipo).
+
+        Retorna (tabla_abierta_en_RW, indice_de_registro) o (None, None).
+        El caller debe cerrar la tabla con t.close().
+        """
+        serie_n = (serie or "").upper()[:4]
+        gecope_doc = SUNAT_A_GECOPE_DOC.get(tipo_documento, "000001")
+        t = _open_table("ventas.dbf")
+        try:
+            for i, r in enumerate(t):
+                try:
+                    if (r["SER_DOCUME"] or "").strip() != serie_n:
+                        continue
+                    if (r["DOCUMENTO"] or "").strip() != gecope_doc:
+                        continue
+                    num_raw = (r["NUM_DOCUME"] or "0").strip()
+                    if int(num_raw) == int(correlativo):
+                        return t, i
+                except Exception:
+                    continue
+        except Exception:
+            t.close()
+            raise
+        t.close()
+        return None, None
+
+    @staticmethod
+    def _update_row(serie: str, correlativo: int, tipo_documento: str,
+                     updates: dict[str, Any]) -> bool:
+        """Aplica un dict de updates al registro identificado.
+
+        Retorna True si se encontro y actualizo.
+        """
+        serie_n = (serie or "").upper()[:4]
+        gecope_doc = SUNAT_A_GECOPE_DOC.get(tipo_documento, "000001")
+        t = _open_table("ventas.dbf")
+        try:
+            field_names = set(t.field_names)
+            updated = False
+            for rec in t:
+                try:
+                    if (rec["SER_DOCUME"] or "").strip() != serie_n:
+                        continue
+                    if (rec["DOCUMENTO"] or "").strip() != gecope_doc:
+                        continue
+                    num_raw = (rec["NUM_DOCUME"] or "0").strip()
+                    if int(num_raw) != int(correlativo):
+                        continue
+                except Exception:
+                    continue
+                # Encontrado — aplicar updates
+                with rec as r:
+                    for k, v in updates.items():
+                        if k in field_names:
+                            try:
+                                r[k] = v
+                            except Exception as exc:  # noqa: BLE001
+                                logger.warning(
+                                    "No se pudo escribir campo %s=%r: %s",
+                                    k, v, exc,
+                                )
+                updated = True
+                break
+            return updated
+        finally:
+            t.close()
+            # Invalidar cache de lectura
+            try:
+                from .dbf_repo import invalidate_cache
+                invalidate_cache("comprobantes_cab")
+                invalidate_cache("ventas_meta")
+            except Exception:
+                pass
+
+    @staticmethod
+    def marcar_enviado_aceptado(serie: str, correlativo: int, tipo_documento: str,
+                                  cdr_hash: str, cdr_descripcion: str = "Aceptado",
+                                  qr_dato: Optional[str] = None) -> bool:
+        """Marca el comprobante como ACEPTADO por SUNAT (estado A)."""
+        updates: dict[str, Any] = {
+            "DATA": True,
+            "FIRMA": True,
+            "RPTA": True,
+            "CODIGO_HAS": (cdr_hash or "")[:40],
+            "MOTIVO_BAJ": "",
+            "REGISTRO_A": False,
+        }
+        if qr_dato:
+            updates["QR_DATO"] = qr_dato[:254]
+        return ComprobanteWriterDBF._update_row(
+            serie, correlativo, tipo_documento, updates,
+        )
+
+    @staticmethod
+    def marcar_enviado_rechazado(serie: str, correlativo: int, tipo_documento: str,
+                                   codigo_cdr: str, descripcion: str) -> bool:
+        """Marca como RECHAZADO por contenido (estado R)."""
+        msg = f"[R][{codigo_cdr}] {descripcion or ''}"[:100]
+        updates: dict[str, Any] = {
+            "DATA": True,
+            "FIRMA": True,
+            "RPTA": True,  # SUNAT respondio, pero rechazo
+            "CODIGO_HAS": "",
+            "MOTIVO_BAJ": msg,
+        }
+        return ComprobanteWriterDBF._update_row(
+            serie, correlativo, tipo_documento, updates,
+        )
+
+    @staticmethod
+    def marcar_timeout_sunat(serie: str, correlativo: int, tipo_documento: str,
+                              descripcion: str) -> bool:
+        """Marca como TIMEOUT transitorio (estado T). Robot reintenta."""
+        msg = f"[T] {descripcion or 'Timeout SUNAT'}"[:100]
+        updates: dict[str, Any] = {
+            "DATA": True,
+            "FIRMA": True,
+            "RPTA": False,  # NO respondio: pendiente reintento
+            "CODIGO_HAS": "",
+            "MOTIVO_BAJ": msg,
+        }
+        return ComprobanteWriterDBF._update_row(
+            serie, correlativo, tipo_documento, updates,
+        )
+
+    @staticmethod
+    def anular_local(serie: str, correlativo: int, tipo_documento: str,
+                      motivo: str = "Anulado por usuario") -> bool:
+        """Anula localmente (estado B). Solo si nunca fue enviado.
+
+        Marca REGISTRO_A=True y MOTIVO_BAJ con el motivo.
+        """
+        updates: dict[str, Any] = {
+            "REGISTRO_A": True,
+            "DATA_BAJA": True,
+            "MOTIVO_BAJ": (motivo or "Anulado local")[:100],
+        }
+        return ComprobanteWriterDBF._update_row(
+            serie, correlativo, tipo_documento, updates,
+        )
+
+    @staticmethod
+    def marcar_baja_sunat(serie: str, correlativo: int, tipo_documento: str,
+                           ticket: str = "", motivo: str = "Dado de baja por SUNAT") -> bool:
+        """Marca como dado de BAJA por SUNAT (estado B).
+
+        Se invoca tras un getStatus exitoso de RA / Resumen condicion 3.
+        """
+        updates: dict[str, Any] = {
+            "REGISTRO_A": True,
+            "DATA_BAJA": True,
+            "RPTA_BAJA": True,
+            "MOTIVO_BAJ": (motivo or "Baja SUNAT")[:100],
+            "TICKET_BAJ": (ticket or "")[:30],
+        }
+        return ComprobanteWriterDBF._update_row(
+            serie, correlativo, tipo_documento, updates,
+        )

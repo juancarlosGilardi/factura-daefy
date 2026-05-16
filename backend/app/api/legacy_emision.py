@@ -218,11 +218,19 @@ def _resolver_cliente_dbf(cliente_id: Optional[int],
 
 @router.post("/api/comprobantes/emitir")
 def emitir_legacy(payload: dict) -> dict:
-    """Emite un comprobante con el shape del frontend React legacy.
+    """Emite un comprobante en 2 pasos — PASO 1: persiste local con estado E.
 
-    Solo persiste localmente en DBF (estado='P'). NO envia a SUNAT en
-    este flujo (eso es trabajo del Sprint 3 / scripts SUNAT directos).
+    NUNCA envia a SUNAT desde aqui. El cliente debe llamar despues a
+    POST /api/comprobantes/{id}/enviar-sunat (PASO 2) para firmar +
+    enviar el XML. Cualquier flag `auto_envio_sunat` del payload se
+    ignora deliberadamente — el flujo en 2 pasos es la unica via
+    soportada en DAEFY.
     """
+    # Limpieza defensiva: descartar cualquier flag legacy de auto-envio.
+    if isinstance(payload, dict):
+        payload.pop("auto_envio_sunat", None)
+        payload.pop("auto_envio", None)
+        payload.pop("enviar_sunat", None)
     if not is_dbf_mode():
         raise HTTPException(
             status_code=501,
@@ -292,8 +300,9 @@ def emitir_legacy(payload: dict) -> dict:
         raise HTTPException(status_code=500,
                              detail=f"Error escribiendo en DBF: {e}")
 
-    # Asegurar shape compatible con frontend antiguo
-    result.setdefault("estado", "P")
+    # Asegurar shape compatible con frontend (estado E = emitido local).
+    result["estado"] = "E"
+    result["debe_enviar_sunat"] = True  # hint al frontend
     return result
 
 

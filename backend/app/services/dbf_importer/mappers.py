@@ -223,28 +223,40 @@ def dbf_producto_to_dict(row: Any) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def _decidir_estado_gecope(row: Any) -> str:
-    """Calcula el estado Factura-mdb (P/A/R/B) a partir de los flags GECOPE.
+    """Calcula el estado Factura-mdb (E/A/T/R/B) a partir de los flags GECOPE.
 
-    Heurística:
-        - REGISTRO_A / DATA_BAJA truthy → 'B' (anulado/baja).
-        - MOTIVO_BAJ con texto y RPTA → si MOTIVO_BAJ menciona "rechaz"
-          (sin sufijo) → 'R'.
-        - RPTA True + CODIGO_HAS no vacío → 'A' (SUNAT aceptó).
-        - DATA True + FIRMA True (sin RPTA) → 'P' (firmado, sin respuesta).
-        - else → 'P'.
+    Heurística refinada para el flujo de emisión en 2 pasos:
+        - REGISTRO_A / DATA_BAJA truthy → 'B' (anulado / dado de baja).
+        - RPTA=True + CODIGO_HAS no vacío → 'A' (SUNAT aceptó CDR=0).
+        - RPTA=True + MOTIVO_BAJ con prefijo "[R]" o "rechaz" → 'R'.
+        - DATA=True + FIRMA=True + RPTA=False (con MOTIVO_BAJ "[T]" o sin él):
+            → 'T' (timeout/error transitorio, robot lo reintenta).
+        - DATA=False y FIRMA=False y RPTA=False → 'E' (emitido local,
+          aun no se envio nada a SUNAT).
+        - Fallback (RPTA=True sin CODIGO_HAS y sin MOTIVO) → 'R'.
     """
     if bool(_g(row, "REGISTRO_A")) or bool(_g(row, "DATA_BAJA")):
         return "B"
 
     rpta = bool(_g(row, "RPTA"))
+    data = bool(_g(row, "DATA"))
+    firma = bool(_g(row, "FIRMA"))
     code_hash = _safe_str(_g(row, "CODIGO_HAS"))
-    motivo = _safe_str(_g(row, "MOTIVO_BAJ")).lower()
+    motivo = _safe_str(_g(row, "MOTIVO_BAJ"))
+    motivo_low = motivo.lower()
 
-    if rpta and "rechaz" in motivo:
-        return "R"
     if rpta and code_hash:
         return "A"
-    return "P"
+    if rpta and (motivo.startswith("[R]") or "rechaz" in motivo_low):
+        return "R"
+    if rpta and not code_hash:
+        # SUNAT respondio pero sin hash: lo tratamos como rechazo
+        return "R"
+    if (data or firma) and not rpta:
+        # Se intentó enviar pero no se obtuvo respuesta valida
+        return "T"
+    # Sin DATA/FIRMA ni RPTA → recien creado en modo emitir-local
+    return "E"
 
 
 def dbf_comprobante_to_dict(row: Any) -> Optional[dict]:
@@ -301,9 +313,20 @@ def dbf_comprobante_to_dict(row: Any) -> Optional[dict]:
     total_pen = round(total * tc, 2) if moneda == "USD" else total
 
     estado = _decidir_estado_gecope(row)
-    cdr_raw = _safe_str(_g(row, "MOTIVO_BAJ")) if estado in ("R", "B") else ""
+    cdr_raw = _safe_str(_g(row, "MOTIVO_BAJ")) if estado in ("R", "B", "T") else ""
     cdr_descripcion = cdr_raw[:500] if cdr_raw else None
-    cdr_codigo = "0" if estado == "A" else None
+    if estado == "A":
+        cdr_codigo = "0"
+    elif estado == "R":
+        # Extraer codigo del prefijo "[R][<codigo>]"
+        cdr_codigo = None
+        if cdr_raw.startswith("[R][") and "]" in cdr_raw[4:]:
+            try:
+                cdr_codigo = cdr_raw[4:].split("]", 1)[0]
+            except Exception:
+                cdr_codigo = None
+    else:
+        cdr_codigo = None
 
     forma_pago_raw = _safe_str(_g(row, "FORMA_PAGO"), 7)
     forma_pago = "Credito" if forma_pago_raw.lower().startswith("cr") else "Contado"

@@ -191,8 +191,15 @@ def export_comprobantes_xlsx(
 
     _tipo_label = {"01": "Factura", "03": "Boleta", "07": "Nota Crédito",
                     "08": "Nota Débito"}
-    _estado_label = {"A": "Aceptado", "P": "Pendiente", "R": "Rechazado",
-                     "B": "Anulado", "X": "Comunic. baja"}
+    _estado_label = {
+        "E": "Emitido (no enviado)",
+        "A": "Aceptado SUNAT",
+        "T": "Timeout (reintenta)",
+        "R": "Rechazado SUNAT",
+        "B": "Anulado/Baja",
+        "P": "Pendiente",
+        "X": "Comunic. baja",
+    }
 
     if is_mdb_mode():
         from ..core.db_adapter.repo import ComprobanteRepoMDB

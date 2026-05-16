@@ -80,6 +80,59 @@ def _generar_qr_b64(comprobante, empresa) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
+_WATERMARK_CSS = """
+<style>
+  /* Watermark BORRADOR — inyectado por pdf_generator si estado != A */
+  body { position: relative; }
+  body::before {
+    content: "BORRADOR — NO ENVIADO A SUNAT";
+    position: fixed;
+    top: 40%; left: 0; right: 0;
+    text-align: center;
+    font-size: 56px;
+    font-weight: 900;
+    color: rgba(220, 0, 0, 0.18);
+    transform: rotate(-25deg);
+    z-index: 9999;
+    pointer-events: none;
+    letter-spacing: 4px;
+  }
+  .borrador-banner {
+    background: #ffe7e7;
+    border: 2px dashed #c00;
+    color: #900;
+    padding: 6px 10px;
+    text-align: center;
+    font-weight: bold;
+    margin: 8px 0;
+    font-size: 12px;
+  }
+</style>
+<div class="borrador-banner">
+  BORRADOR — Este comprobante NO ha sido aceptado por SUNAT (sin valor tributario)
+</div>
+"""
+
+
+def _inyectar_watermark(html: str, watermark_text: str) -> str:
+    """Inyecta CSS+overlay de watermark al HTML antes de pasarlo al motor PDF.
+
+    Lo hacemos generico: si encontramos </head>, lo insertamos antes; si no,
+    lo prependemos al body. Asi funciona con templates A4/A5/TICKET por igual.
+    """
+    if not watermark_text:
+        return html
+    css = _WATERMARK_CSS.replace("BORRADOR — NO ENVIADO A SUNAT", watermark_text)
+    if "</head>" in html:
+        return html.replace("</head>", css + "</head>", 1)
+    if "<body" in html:
+        # Buscar el cierre de <body ...>
+        idx = html.find(">", html.find("<body"))
+        if idx > 0:
+            return html[: idx + 1] + css + html[idx + 1 :]
+    return css + html
+
+
 _TIPO_NOMBRES = {
     "01": "FACTURA ELECTRONICA",
     "03": "BOLETA DE VENTA ELECTRONICA",
@@ -101,15 +154,27 @@ def generar_pdf_comprobante(comprobante, detalles, empresa, config,
 
     formato: "A4" (default, hoja completa), "A5" (media hoja), "TICKET"
     (impresora termica 80mm). Si no se reconoce, cae a A4.
+
+    Flujo en 2 pasos DAEFY: si el comprobante NO esta aceptado por SUNAT
+    (estado != "A"), se omite el QR y se agrega un watermark "BORRADOR —
+    NO ENVIADO A SUNAT". Esto evita que el cliente final imprima un PDF
+    con QR invalido (campos vacios → SUNAT no validara).
     """
     fmt = (formato or "A4").upper()
     template_name = _FORMATO_TEMPLATES.get(fmt, "factura_a4.html")
     template = env.get_template(template_name)
 
-    qr_b64 = _generar_qr_b64(comprobante, empresa)
+    estado = getattr(comprobante, "estado", None) or "E"
+    aceptado_sunat = (estado == "A")
+
+    qr_b64 = _generar_qr_b64(comprobante, empresa) if aceptado_sunat else ""
+    watermark = "" if aceptado_sunat else "BORRADOR — NO ENVIADO A SUNAT"
 
     logo_path, logo_b64 = resolver_logo(empresa)
-    logger.debug("PDF logo: path=%s b64_len=%d", logo_path, len(logo_b64))
+    logger.debug(
+        "PDF logo: path=%s b64_len=%d | estado=%s qr=%s",
+        logo_path, len(logo_b64), estado, bool(qr_b64),
+    )
 
     html = template.render(
         comprobante=comprobante,
@@ -122,7 +187,15 @@ def generar_pdf_comprobante(comprobante, detalles, empresa, config,
         ),
         logo_b64=logo_b64,
         logo_path=logo_path,
+        es_borrador=not aceptado_sunat,
+        watermark_text=watermark,
+        estado_comp=estado,
     )
+
+    # Si es borrador, inyectamos CSS de watermark/overlay aunque el template
+    # no lo soporte (asi los templates legacy tambien lo muestran).
+    if not aceptado_sunat:
+        html = _inyectar_watermark(html, watermark)
 
     # Preferir WeasyPrint
     weasy_err: Exception | None = None
